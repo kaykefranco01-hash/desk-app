@@ -206,37 +206,83 @@
     $('updated').textContent = hms(new Date(s.ts));
     const running = ORDER.filter(a => (s.agents || {})[a] && s.agents[a].running).length;
     $('agents-running').textContent = running; $('agents-running').classList.remove('skel-i');
-    $('carousel').innerHTML = ORDER.map(a => card(a, (s.cards || {})[a] || {}, s)).join('');
-    const an = (s.cards || {}).analyst; const rc = $('ring-analyst'); if (rc && an) window.DeskChart.ring(rc, an.score, an.greenFrom || 70);
-    const ex = $('bar-exec'); if (ex) requestAnimationFrame(() => ex.style.width = ex.dataset.w + '%');
+    const car = $('carousel'), sl = car.scrollLeft;
+    car.innerHTML = ORDER.map(a => card(a, (s.cards || {})[a] || {}, s)).join('');
+    car.scrollLeft = sl; carDots();
   }
+  // page dots under the agents carousel: one per card, the one nearest the left edge is on
+  function carDots() {
+    const car = $('carousel'), cards = car.querySelectorAll('.card'), dots = $('car-dots');
+    if (!cards.length) { dots.innerHTML = ''; return; }
+    const step = cards.length > 1 ? cards[1].offsetLeft - cards[0].offsetLeft : 1;
+    const max = car.scrollWidth - car.clientWidth;
+    const i = car.scrollLeft >= max - 2 ? cards.length - 1 : Math.max(0, Math.min(cards.length - 1, Math.round(car.scrollLeft / (step || 1))));
+    if (dots.children.length !== cards.length) dots.innerHTML = Array.from(cards, () => '<i></i>').join('');
+    [...dots.children].forEach((d, k) => d.classList.toggle('on', k === i));
+  }
+  $('carousel').addEventListener('scroll', () => requestAnimationFrame(carDots), {passive: true});
+  addEventListener('resize', carDots);
   function dot(c) { return `<span class="dot ${c.paused ? 'paused' : c.running ? 'on' : ''}"></span>`; }
+  // Agents carousel cards. Every value comes from state.json cards (or demo.json while DEMO runs); missing -> "—" / "à espera".
+  const ICON = {   // one shape + colour per agent, two small eyes
+    scanner: '<path d="M18 2l3.2 5 5.8-1.3-1.3 5.8 5 3.2-5 3.2 1.3 5.8-5.8-1.3L18 34l-3.2-5-5.8 1.3 1.3-5.8-5-3.2 5-3.2L9 5.7l5.8 1.3z" fill="#2ec4b6"/>',
+    auditor: '<path d="M18 3l12 4.5v9c0 7.5-5.2 13.5-12 16.5C11.2 30 6 24 6 16.5v-9z" fill="#e5e5ea"/>',
+    analyst: '<path d="M18 4.5c1.2 0 2.2.6 2.8 1.7l11 19.5c1.2 2.1-.3 4.8-2.8 4.8H7c-2.5 0-4-2.7-2.8-4.8l11-19.5c.6-1.1 1.6-1.7 2.8-1.7z" fill="#ff5a3c"/>',
+    executor: '<path d="M11 29c-4.4 0-7-3-7-6.6 0-3 2-5.4 4.8-6C9 11.7 12.6 8 17.2 8c3.6 0 6.6 2.2 7.8 5.4 4 .2 7 3.4 7 7.6 0 4.6-3.4 8-7.8 8z" fill="#8e7cff"/>',
+    risk: '<path d="M18 3.5l12.5 7.2v14.6L18 32.5 5.5 25.3V10.7z" fill="#ff6b9a"/>',
+  };
+  const SUBC = {scanner: '#64a8ff', auditor: '#64d2ff', analyst: '#ffd60a', executor: '#00d35a', risk: '#ff6b9a'};
+  const icon = a => `<span class="ag-ic"><svg viewBox="0 0 36 36" aria-hidden="true">${ICON[a]}<rect x="14.2" y="15" width="2.2" height="5" rx="1.1" fill="#111"/><rect x="19.6" y="15" width="2.2" height="5" rx="1.1" fill="#111"/></svg></span>`;
+  const n0 = v => v == null || isNaN(v) ? '—' : Number(v).toLocaleString('en-US');
+  function av(name, img, mint) {   // coin image only if the JSON carries a plain https URL, else the first letter
+    const u = safe(img), ch = esc(([...String(name || mint || '?').replace(/^[^A-Za-z0-9]+/, '')][0] || '?').toUpperCase());
+    let h = 0; for (const x of String(mint || name || '')) h = (h * 31 + x.charCodeAt(0)) >>> 0;
+    return u ? `<span class="cav"><img src="${esc(u)}" alt="" referrerpolicy="no-referrer" loading="lazy"></span>` : `<span class="cav" style="background:hsl(${h % 360} 45% 32%)">${ch}</span>`;
+  }
   function card(a, c, s) {
-    const head = `<div class="card-h"><div class="name" style="color:${COLORS[a]}">${dot(c)}${esc(c.title || NAMES[a])}</div><span class="ter small">${c.paused ? 'paused' : c.running ? 'running' : 'no heartbeat'}</span></div>`;
-    let body = '', foot = '';
+    const st = c.paused ? 'paused' : c.running ? '' : 'no heartbeat';
+    let sub = '', body = '';
     if (a === 'scanner') {
-      body = `<div class="big num">${c.pools || 0} pool${c.pools === 1 ? '' : 's'}</div>` + (c.feed && c.feed.length
-        ? `<div class="feed">${c.feed.slice(0, 5).map(f => `<a class="fr ${f.verdict === 'kill' ? 'kill' : 'pass'}" data-coin="${esc(f.mint)}" href="#"><span class="n">${esc(f.name || short(f.mint))}</span><span class="r">${f.verdict === 'kill' ? esc(f.reason || 'killed') : '→ auditor'}</span></a>`).join('')}</div>`
-        : `<div class="lbl">${esc(c.empty || 'Listening for graduations')}</div>`);
+      sub = `${n0(c.pools)} pair${c.pools === 1 ? '' : 's'}`;
+      const f = (c.feed || []).slice(0, 3);
+      body = f.length ? `<div class="sc-list">${f.map(x => {
+        // pill: the coin's score when the JSON has one, else the Scanner verdict itself (never an invented number)
+        const pass = x.verdict !== 'kill', sc = x.score != null && !isNaN(x.score) ? String(Math.round(x.score)) : (pass ? 'pass' : 'kill');
+        const hi = x.score != null && !isNaN(x.score) ? x.score >= 70 : pass;
+        return `<a class="sc-r" data-coin="${esc(x.mint)}" href="#">${av(x.name, x.image, x.mint)}<span class="sc-t"><span class="sc-n">${esc(x.name || short(x.mint))}</span><span class="sc-why ${pass ? 'ok' : ''}">${pass ? '→ auditor' : esc(x.reason || 'killed')}</span></span><span class="spill ${hi ? 'hi' : ''}">${esc(sc)}</span></a>`; }).join('')}</div>`
+        : `<div class="ag-empty"><b>—</b>${esc(c.empty || 'à espera de moedas')}</div>`;
     } else if (a === 'auditor') {
-      const cur = c.current;
-      body = `<div class="big num">${c.takenApart || 0} taken apart</div>` +
-        `<div class="strips">${(cur ? cur.strips : Array.from({length: 8}, (_, i) => ({n: i + 1, state: 'idle'}))).map(x => `<div class="strip ${x.state === 'not checked' ? '' : esc(x.state)}">${x.n}</div>`).join('')}</div>` +
-        `<div class="lbl" style="margin-top:12px">${cur ? `<a data-audit="${esc(cur.mint)}" href="#">${esc(cur.name)} · ${esc(cur.status)}</a>` : '<a data-audit="" href="#">No coin taken apart yet ›</a>'}</div>`;
-      foot = `<span>${c.rejected || 0} rejected</span><span>${c.enabled === false ? 'off' : ''}</span>`;
+      const cur = c.current, strips = cur && cur.strips ? cur.strips : null;
+      const ok = strips ? strips.filter(x => x.state === 'pass').length : null, red = strips && strips.some(x => x.state === 'red');
+      sub = `${n0(c.takenApart)} audited · ${n0(c.rejected)} rejected`;
+      body = `<div class="au-big num ${red ? 'red' : ok === 8 ? 'green' : ''}">${ok == null ? '—' : ok}<span>/8</span></div>
+        <div class="au-strips">${(strips || Array.from({length: 8}, (_, i) => ({n: i + 1, state: 'idle'}))).map(x => `<i class="${x.state === 'pass' ? 'pass' : x.state === 'red' ? 'red' : x.state === 'pending' ? 'pend' : ''}"></i>`).join('')}</div>
+        <div class="ag-line">${cur ? `<a data-audit="${esc(cur.mint)}" href="#"><b>${esc(cur.name || short(cur.mint))}</b> · ${esc(cur.status || '')}</a>` : `<span class="sec">${c.enabled === false ? 'off' : 'à espera'}</span>`}</div>`;
     } else if (a === 'analyst') {
-      body = `<div class="big">${esc(c.label || 'Scoring')}</div><canvas id="ring-analyst" class="ring"></canvas>`;
-      foot = `<span>${c.score == null ? 'No coin scored yet' : 'green from ' + (c.greenFrom || 70)}</span><span>${esc(c.mode || '')}</span>`;
+      const sc = c.score, g = c.greenFrom || 70, has = sc != null && !isNaN(sc), pass = has && sc >= g;
+      const nm = c.name || (c.mint ? coinName(c.mint) : '');
+      sub = `${esc(c.mode || 'rules')} · from ${g}`;
+      const R = 34, L = 2 * Math.PI * R, fr = has ? Math.max(0, Math.min(1, sc / 100)) : 0;
+      body = `<div class="an-row"><svg class="an-ring ${has ? (pass ? 'pass' : 'fail') : 'none'}" viewBox="0 0 80 80" aria-label="${has ? 'score ' + sc : 'no score'}">
+          <circle cx="40" cy="40" r="${R}" class="tr"/>${has ? `<circle cx="40" cy="40" r="${R}" class="pg" stroke-dasharray="${(fr * L).toFixed(1)} ${L.toFixed(1)}" transform="rotate(-90 40 40)"/>` : ''}
+          ${has ? (pass ? '<path d="M27 41l9 9 17-19" class="mk"/>' : '<path d="M29 29l22 22M51 29L29 51" class="mk"/>') : '<path d="M30 40h20" class="mk"/>'}</svg>
+        <div class="an-c">${has && (c.mint || nm) ? av(nm, c.image, c.mint) : ''}<div class="an-n">${has ? esc(nm || c.label || '—') : '—'}</div>
+          <div class="an-s ${has ? (pass ? 'green' : 'red') : 'sec'}">${has ? 'score ' + Math.round(sc) : 'à espera'}</div></div></div>`;
     } else if (a === 'executor') {
-      const l = c.last, w = l ? (l.status === 'bought' ? 100 : 60) : 0;
-      body = `<div class="big num">${c.trades || 0} trades</div>` +
-        (l ? `<div class="lbl num">${usd(l.sizeUsd)} · ${esc(l.stackPct)}% of stack</div><div class="bar"><i id="bar-exec" data-w="${w}"></i></div><div class="lbl">${l.status === 'bought' ? '✓ Filled' : 'Executing... ' + w + '%'}</div>`
-           : `<div class="lbl">No trade yet tonight · ${esc(c.stackPctSetting)}% of stack per trade</div>`);
+      const l = c.last;
+      sub = `${n0(c.trades)} trade${c.trades === 1 ? '' : 's'}`;
+      body = l ? `<div class="ex-c">${av(l.name, l.image, l.mint)}<span class="sc-t"><span class="ex-n">${esc(l.name || short(l.mint))}</span><span class="ex-a num">${usd(l.sizeUsd)}${l.stackPct != null ? ' · ' + esc(l.stackPct) + '%' : ''}</span></span></div>
+          <div class="ex-btn ${l.status === 'bought' ? 'ok' : 'run'}">${l.status === 'bought' ? '✓ Filled' : esc(l.bar || 'Executing…')}</div>`
+        : `<div class="ex-c"><span class="cav">—</span><span class="sc-t"><span class="ex-n">—</span><span class="ex-a">${c.stackPctSetting != null ? esc(c.stackPctSetting) + '% of stack per trade' : ''}</span></span></div><div class="ex-btn idle">à espera</div>`;
     } else if (a === 'risk') {
-      body = `<div class="big">${esc(c.label || c.lastExit || 'Guarding')}</div><div class="lbl num">${c.guarding || 0} open position${c.guarding === 1 ? '' : 's'}</div>`;
-      foot = `<span class="pills">${(c.pills || []).map(p => `<span class="pill ${p.color === '#00d35a' ? 'green' : 'red'}">${esc(p.text)}</span>`).join('')}</span>`;
+      const g = c.guarding || 0, trail = /trail on/i.test(c.label || '');
+      sub = g ? `guarding ${g}` : 'no position';
+      body = `<div class="rk-big">${esc(c.label || c.lastExit || (g ? 'Guarding' : 'à espera'))}</div>
+        <div class="ag-line sec">${g ? `${g} open position${g === 1 ? '' : 's'} · trail ${trail ? '<b class="green">on</b>' : 'off'}` : 'nenhuma posição aberta'}</div>
+        <div class="pills">${(c.pills || []).map(p => `<span class="pill ${p.color === '#00d35a' ? 'green' : 'red'}">${esc(p.text)}</span>`).join('')}</div>`;
     }
-    return `<div class="card" data-go="agents" data-anchor="ag-${a}">${head}${body}<div class="foot">${foot}</div></div>`;
+    return `<div class="card ag-${a}" data-go="agents" data-anchor="ag-${a}"><div class="ag-hd">${icon(a)}<div class="ag-tt"><div class="ag-nm">${esc(NAMES[a])}</div>
+      <div class="ag-sub" style="color:${st ? 'var(--ter)' : SUBC[a]}">• ${st ? esc(st) : sub}</div></div></div>${body}</div>`;
   }
   const ACT_ICO = {bought: ['#0a84ff', 'B'], sold: ['#00d35a', 'S'], stopped: ['#ff453a', 'S'], rejected: ['#2c2c2e', '×']};
   function actRow(r) {

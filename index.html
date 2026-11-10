@@ -35,8 +35,9 @@
     <div class="chart-wrap" id="chart-wrap"><canvas id="chart" aria-label="Balance chart"></canvas>
       <div id="chart-empty" class="chart-empty" hidden>Waiting for the first trade</div></div>
     <div class="ranges" id="ranges"><button class="on" data-r="LIVE">LIVE</button><button data-r="1H">1H</button><button data-r="4H">4H</button><button data-r="1D">1D</button><button data-r="1W">1W</button><button data-r="ALL">ALL</button></div>
-    <h2 class="h2">Agents · <span id="agents-running" class="num skel-i">5</span> running</h2>
-    <div id="carousel" class="carousel"></div>
+    <h2 class="h2 row-h ag-h">Agents <span class="ag-run green"><span id="agents-running" class="num skel-i">5</span> running</span></h2>
+    <div id="carousel" class="carousel" aria-label="Agents"></div>
+    <div id="car-dots" class="car-dots" aria-hidden="true"></div>
     <h2 class="h2 row-h">Activity <button class="see-all" data-go="activity">See all</button></h2>
     <div id="home-activity" class="list"></div>
     <div class="meta ter small">Last update <span id="updated" class="num">—</span></div>

@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Desk">
+<meta name="theme-color" content="#000000">
+<meta name="referrer" content="no-referrer">
+<title>Desk</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="err" class="err" hidden></div>
+<main id="view">
+  <section id="tab-home" class="tab">
+    <header class="nav">
+      <button class="avatar" data-go="account" aria-label="Account"></button>
+      <div class="brand">Grok Bot ›</div>
+      <div class="nav-r"><span class="bell" aria-label="Notifications"></span></div>
+    </header>
+    <div class="bal-row">
+      <div id="balance" class="balance num skel">$000.00</div>
+      <span id="paper" class="pill-paper" hidden>PAPER</span>
+    </div>
+    <div class="sub-row"><span id="today" class="num sec">+0.00%</span><span id="mult" class="pill-mult num">1.00×</span></div>
+    <div class="chart-wrap"><canvas id="chart" aria-label="Balance chart"></canvas>
+      <div id="chart-empty" class="empty" hidden>Waiting for the first trade</div></div>
+    <div class="ranges"><button class="on">LIVE</button><button>1H</button><button>4H</button><button>1D</button><button>1W</button><button>ALL</button></div>
+    <div class="meta"><span class="ter">Last update</span> <span id="updated" class="num sec">—</span></div>
+    <div id="hosting-note" class="note" hidden>Hosting test · no trades yet</div>
+    <h2 class="h2">Agents · <span id="agents-running" class="num">0</span> running</h2>
+    <div id="carousel" class="carousel"></div>
+    <h2 class="h2">Activity · <a data-go="activity">See all</a></h2>
+    <div id="home-activity" class="list"><div class="empty-row">Nothing yet tonight</div></div>
+  </section>
+  <section id="tab-agents" class="tab" hidden>
+    <header class="nav"><div class="title">Agents</div></header>
+    <div id="agents-list" class="list-cards"></div>
+  </section>
+  <section id="tab-activity" class="tab" hidden>
+    <header class="nav"><div class="title">Activity</div></header>
+    <div id="activity-list" class="list"><div class="empty-row">Nothing yet tonight</div></div>
+  </section>
+  <section id="tab-account" class="tab" hidden>
+    <header class="nav"><div class="title">Account</div></header>
+    <div class="group">
+      <div class="row"><span>Mode</span><span id="acc-mode" class="num sec">—</span></div>
+      <a id="acc-profile" class="row link" target="_blank" rel="noopener">Your FOMO profile <span class="chev">›</span></a>
+      <button id="acc-invite" class="row link">Invite a friend <span class="chev">›</span></button>
+      <div class="row"><span>Notifications</span><span class="sec">Telegram only (plan B, no web push)</span></div>
+    </div>
+    <p class="ter small">Settings are read-only here. Change them with Telegram commands, e.g. "set stop to -8%".</p>
+    <div id="acc-settings" class="group"></div>
+  </section>
+</main>
+<nav class="tabbar">
+  <button data-go="home" class="on"><i class="ic ic-home"></i>Home</button>
+  <button data-go="agents"><i class="ic ic-agents"></i>Agents</button>
+  <button data-go="activity"><i class="ic ic-activity"></i>Activity</button>
+  <button data-go="account"><i class="ic ic-account"></i>Account</button>
+</nav>
+<script src="chart.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

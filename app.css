@@ -209,3 +209,13 @@ main{max-width:560px;margin:0 auto;padding:env(safe-area-inset-top) calc(16px + 
 .cmdlbl{margin:10px 0 6px}
 .cmd{background:#000;border-radius:10px;padding:10px 12px;font:12.5px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all;color:#e5e5ea}
 .copybtn{margin-top:8px;width:100%;min-height:44px;border-radius:10px;background:rgba(0,211,90,.16);color:var(--green);font-weight:600;font-size:16px}
+/* DEMO (ops/demo.py): fixed orange banner while demo.json is active; nothing changes when it is not */
+.demo-bar{position:fixed;top:0;left:0;right:0;z-index:30;background:#ff9f0a;color:#000;cursor:pointer;
+  padding:calc(6px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) 8px calc(16px + env(safe-area-inset-left));box-shadow:0 2px 12px rgba(0,0,0,.5)}
+.demo-t{font-weight:800;font-size:13px;letter-spacing:.3px;text-transform:uppercase}
+.demo-s{font-size:15px;font-weight:600;line-height:1.25;margin-top:2px;min-height:19px}
+.demo-pb{height:4px;background:rgba(0,0,0,.2);border-radius:2px;margin-top:6px;overflow:hidden}
+.demo-pb i{display:block;height:100%;width:0;background:#000;transition:width 1.8s linear}
+body.demo main{padding-top:calc(env(safe-area-inset-top) + 92px)}
+body.demo .nav-push{top:calc(env(safe-area-inset-top) + 86px)}
+.pill-paper.demo{background:#ff9f0a;outline:2px solid #fff}

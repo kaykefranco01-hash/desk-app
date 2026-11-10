@@ -39,12 +39,26 @@
   const cache = {};                  // name -> last good JSON (kept on screen while offline)
   let lastOk = null, offline = false, failN = 0, retryAt = 0;
   async function get(name) {
+    const dv = demoFile(name); if (dv !== undefined) { cache[name] = dv; return dv; }
     let r;
     try { r = await fetch(`${BASE}/d/${D}/${name}.json?t=${Date.now()}`, {cache: 'no-store', referrerPolicy: 'no-referrer'}); }
     catch (e) { const n = new Error('network'); n.net = true; throw n; }
     if (r.status === 400 || r.status === 404) { const e = new Error('missing'); e.missing = true; throw e; }
     if (!r.ok) { const e = new Error('HTTP ' + r.status); e.net = true; throw e; }
     const j = await r.json(); cache[name] = j; return j;
+  }
+  // ---------- DEMO (ops/demo.py): one separate file, demo.json. Shown ONLY while it is active and fresh (< 30 s).
+  // While on, the files it carries replace the same names on screen, under an orange DEMO banner. When it ends or
+  // goes stale the app reloads and shows the real desk again. Nothing here writes anywhere.
+  let DEMO = null, demoWas = false;
+  const DEMO_FRESH_S = 30;
+  const demoOn = () => !!(DEMO && DEMO.active === true && DEMO.files && Math.abs(Date.now() / 1000 - Number(DEMO.epoch || 0)) < DEMO_FRESH_S);
+  function demoFile(name) {
+    if (!demoOn()) return undefined;
+    const f = DEMO.files;
+    if (Object.prototype.hasOwnProperty.call(f, name)) return f[name];
+    if (/^chart(\/|$)/.test(name)) return f['chart/LIVE'];
+    return undefined;
   }
   async function tryGet(name) { try { return await get(name); } catch (e) { if (e.missing) { cache[name] = null; return null; } throw e; } }
 
@@ -57,7 +71,7 @@
     if (vis && e.parentNode !== vis) vis.appendChild(e);
     e.hidden = false;
   }
-  setInterval(errRow, 1000);
+  setInterval(() => { errRow(); if (demoWas && !demoOn()) location.reload(); }, 1000);
 
   // ---------- odometer ----------
   function odometer(el, text) {
@@ -184,7 +198,9 @@
 
   function renderState(s) {
     odometer($('balance'), usd(s.balance));
-    $('paper').hidden = s.mode !== 'PAPER'; $('coin-paper').hidden = s.mode !== 'PAPER'; fitBalance();
+    const pm = s.mode === 'PAPER' || s.mode === 'DEMO', pl = s.mode === 'DEMO' ? 'DEMO' : 'PAPER';
+    $('paper').textContent = pl; $('coin-paper').textContent = pl; $('paper').classList.toggle('demo', s.mode === 'DEMO');
+    $('paper').hidden = !pm; $('coin-paper').hidden = !pm; fitBalance();
     const t = $('today'); t.classList.remove('skel-i'); t.textContent = pct(s.today_pct); t.className = 'num today ' + ((s.today_pct || 0) >= 0 ? 'green' : 'red');
     const m = $('mult'); m.classList.remove('skel-i'); m.textContent = Number(s.multiplier || 1).toFixed(2) + '×';
     $('updated').textContent = hms(new Date(s.ts));
@@ -486,7 +502,7 @@
       const e = await get('events');
       if (e.lastSeq !== lastSeq) {
         const fresh = (e.events || []).filter(x => x.seq > lastSeq); lastSeq = e.lastSeq;
-        if (fresh.some(x => x.kind === 'balance')) { const b = fresh.filter(x => x.kind === 'balance').pop(); if (cache.state && b.value != null) { odometer($('balance'), usd(b.value)); fitBalance(); } }
+        if (!demoOn() && fresh.some(x => x.kind === 'balance')) { const b = fresh.filter(x => x.kind === 'balance').pop(); if (cache.state && b.value != null) { odometer($('balance'), usd(b.value)); fitBalance(); } }
         renderBellDot();
         const v = visible(), top = stack[stack.length - 1];
         if (v === 'scr-audit' && fresh.some(x => x.kind === 'audit_layer' && top && x.mint === top.arg)) renderAudit(top.arg);
@@ -498,6 +514,39 @@
   setInterval(() => { if (D && !offline) refreshScreen(); }, SCREEN_S * 1000);
   addEventListener('resize', () => { if (cache['chart/' + range]) drawChart(cache['chart/' + range]); });
   document.addEventListener('visibilitychange', () => { if (!document.hidden && D) { pollState(); refreshScreen(); } });
+
+  // ---------- DEMO poll ----------
+  function demoBar() {
+    const b = $('demo-bar'), on = demoOn();
+    document.body.classList.toggle('demo', on); b.hidden = !on; if (!on) return;
+    const st = DEMO.step || {}, pc = Math.max(0, Math.min(100, 100 * (DEMO.elapsed || 0) / (DEMO.total || 240)));
+    $('demo-t').textContent = `DEMO · passo ${st.n || 1}/${st.of || 6} · simulação, nada é real`;
+    $('demo-s').textContent = st.text || '';
+    $('demo-p').style.width = pc.toFixed(1) + '%';
+    b.dataset.agent = st.agent || '';
+  }
+  $('demo-bar').onclick = () => {
+    if (!demoOn() || !DEMO.focus) return;
+    const ag = DEMO.step && DEMO.step.agent, m = DEMO.focus, top = stack[stack.length - 1];
+    if (ag === 'auditor') { if (!(top && top.scr === 'scr-audit' && top.arg === m)) push('scr-audit', m); }
+    else if (ag === 'executor' || ag === 'risk') { if (!(top && top.scr === 'scr-coin' && top.arg === m)) push('scr-coin', m); }
+    else go('home');
+  };
+  async function pollDemo() {
+    try {
+      const r = await fetch(`${BASE}/d/${D}/demo.json?t=${Date.now()}`, {cache: 'no-store', referrerPolicy: 'no-referrer'});
+      DEMO = r.ok ? await r.json() : null;
+    } catch (e) { /* keep the last copy; freshness decides */ }
+    const on = demoOn();
+    if (on) {
+      demoWas = true; demoBar();
+      cache.state = DEMO.files.state;
+      try { renderState(cache.state); lastOk = new Date(); offline = false; failN = 0; errRow(); } catch (err) { console.error(err); }
+      refreshScreen();
+    } else if (demoWas) { location.reload(); return; }   // demo over: back to the real desk, exactly as before
+    else demoBar();
+    setTimeout(pollDemo, on ? 2000 : 5000);
+  }
 
   // ---------- start ----------
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
@@ -516,5 +565,5 @@
     $('carousel').innerHTML = ''; return;
   }
   loadingLayout();
-  pollState().then(() => { refreshScreen(); tryGet('index').catch(() => {}); pollEvents(); });
+  pollState().then(() => { refreshScreen(); tryGet('index').catch(() => {}); pollEvents(); pollDemo(); });
 })();

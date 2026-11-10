@@ -17,53 +17,77 @@
 <body>
 <div id="err" class="err" hidden></div>
 <main id="view">
+  <!-- HOME -->
   <section id="tab-home" class="tab">
     <header class="nav">
-      <button class="avatar" data-go="account" aria-label="Account"></button>
-      <div class="brand">Grok Bot ›</div>
-      <div class="nav-r"><span class="bell" aria-label="Notifications"></span></div>
+      <button class="avatar" data-go="account" aria-label="Account"><span>K</span></button>
+      <button class="brand" data-go="agents">Grok Bot <span class="chev">›</span></button>
+      <button class="icon-btn" id="btn-search" aria-label="Search"><i class="i-search"></i></button>
+      <button class="icon-btn" id="btn-bell" aria-label="Notifications"><i class="i-bell"></i><b id="bell-dot" class="bell-dot" hidden></b></button>
     </header>
+    <div class="err-slot"></div>
     <div class="bal-row">
-      <div id="balance" class="balance num skel">$000.00</div>
+      <div id="balance" class="balance num skel" aria-live="polite">$000.00</div>
       <span id="paper" class="pill-paper" hidden>PAPER</span>
     </div>
-    <div class="sub-row"><span id="today" class="num sec">+0.00%</span><span id="mult" class="pill-mult num">1.00×</span></div>
-    <div class="chart-wrap"><canvas id="chart" aria-label="Balance chart"></canvas>
-      <div id="chart-empty" class="empty" hidden>Waiting for the first trade</div></div>
-    <div class="ranges"><button class="on">LIVE</button><button>1H</button><button>4H</button><button>1D</button><button>1W</button><button>ALL</button></div>
-    <div class="meta"><span class="ter">Last update</span> <span id="updated" class="num sec">—</span></div>
-    <div id="hosting-note" class="note" hidden>Hosting test · no trades yet</div>
-    <h2 class="h2">Agents · <span id="agents-running" class="num">0</span> running</h2>
+    <div class="sub-row"><span id="today" class="num today skel-i">+0.00%</span><span id="mult" class="pill-mult num skel-i">1.00×</span></div>
+    <div class="chart-wrap" id="chart-wrap"><canvas id="chart" aria-label="Balance chart"></canvas>
+      <div id="chart-empty" class="chart-empty" hidden>Waiting for the first trade</div></div>
+    <div class="ranges" id="ranges"><button class="on" data-r="LIVE">LIVE</button><button data-r="1H">1H</button><button data-r="4H">4H</button><button data-r="1D">1D</button><button data-r="1W">1W</button><button data-r="ALL">ALL</button></div>
+    <h2 class="h2">Agents · <span id="agents-running" class="num skel-i">5</span> running</h2>
     <div id="carousel" class="carousel"></div>
-    <h2 class="h2">Activity · <a data-go="activity">See all</a></h2>
-    <div id="home-activity" class="list"><div class="empty-row">Nothing yet tonight</div></div>
+    <h2 class="h2 row-h">Activity <button class="see-all" data-go="activity">See all</button></h2>
+    <div id="home-activity" class="list"></div>
+    <div class="meta ter small">Last update <span id="updated" class="num">—</span></div>
   </section>
+  <!-- AGENTS -->
   <section id="tab-agents" class="tab" hidden>
     <header class="nav"><div class="title">Agents</div></header>
-    <div id="agents-list" class="list-cards"></div>
+    <div class="err-slot"></div>
+    <div id="agents-list" class="stack"></div>
   </section>
+  <!-- ACTIVITY -->
   <section id="tab-activity" class="tab" hidden>
     <header class="nav"><div class="title">Activity</div></header>
-    <div id="activity-list" class="list"><div class="empty-row">Nothing yet tonight</div></div>
+    <div class="err-slot"></div>
+    <div id="activity-list" class="list"></div>
+    <button id="activity-more" class="btn-secondary" hidden>Load older</button>
   </section>
+  <!-- ACCOUNT -->
   <section id="tab-account" class="tab" hidden>
     <header class="nav"><div class="title">Account</div></header>
-    <div class="group">
-      <div class="row"><span>Mode</span><span id="acc-mode" class="num sec">—</span></div>
-      <a id="acc-profile" class="row link" target="_blank" rel="noopener">Your FOMO profile <span class="chev">›</span></a>
-      <button id="acc-invite" class="row link">Invite a friend <span class="chev">›</span></button>
-      <div class="row"><span>Notifications</span><span class="sec">Telegram only (plan B, no web push)</span></div>
-    </div>
-    <p class="ter small">Settings are read-only here. Change them with Telegram commands, e.g. "set stop to -8%".</p>
-    <div id="acc-settings" class="group"></div>
+    <div class="err-slot"></div>
+    <div id="account-body"></div>
+  </section>
+  <!-- PUSHED SCREENS -->
+  <section id="scr-coin" class="tab screen" hidden>
+    <header class="nav nav-push"><button class="back" data-back aria-label="Back">‹</button><div class="nav-t" id="coin-navt"></div><span id="coin-paper" class="pill-paper" hidden>PAPER</span></header>
+    <div class="err-slot"></div>
+    <div id="coin-body"></div>
+  </section>
+  <section id="scr-audit" class="tab screen" hidden>
+    <header class="nav nav-push"><button class="back" data-back aria-label="Back">‹</button><div class="nav-t">Auditor</div></header>
+    <div class="err-slot"></div>
+    <div id="audit-body"></div>
+  </section>
+  <section id="scr-search" class="tab screen" hidden>
+    <header class="nav nav-push"><button class="back" data-back aria-label="Back">‹</button>
+      <input id="search-in" class="search-in" placeholder="Name, symbol or mint" autocomplete="off" autocapitalize="off" spellcheck="false"></header>
+    <div id="search-list" class="list"></div>
+  </section>
+  <section id="scr-bell" class="tab screen" hidden>
+    <header class="nav nav-push"><button class="back" data-back aria-label="Back">‹</button><div class="nav-t">Notifications</div></header>
+    <div class="err-slot"></div>
+    <div id="bell-list" class="list"></div>
   </section>
 </main>
-<nav class="tabbar">
+<nav class="tabbar" id="tabbar">
   <button data-go="home" class="on"><i class="ic ic-home"></i>Home</button>
   <button data-go="agents"><i class="ic ic-agents"></i>Agents</button>
   <button data-go="activity"><i class="ic ic-activity"></i>Activity</button>
   <button data-go="account"><i class="ic ic-account"></i>Account</button>
 </nav>
+<div id="toast" class="toast" hidden></div>
 <script src="chart.js"></script>
 <script src="app.js"></script>
 </body>

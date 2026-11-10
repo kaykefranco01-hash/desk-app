@@ -195,3 +195,17 @@ main{max-width:560px;margin:0 auto;padding:env(safe-area-inset-top) calc(16px + 
 }
 .row .v.green{color:var(--green)} .row .v.red{color:var(--red)}
 #bell-list .item .s{white-space:normal}
+
+/* pilot cards */
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 10px}
+.chip{background:var(--card);border-radius:999px;padding:7px 12px;font-size:14px;font-variant-numeric:tabular-nums}
+.chip .ck{color:var(--sec)} .chip.ok{color:var(--green);background:rgba(0,211,90,.14)} .chip.bad{color:var(--red);background:rgba(255,69,58,.14)}
+.group.pad{padding:12px 14px}
+.diff{font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;border-radius:10px;overflow:hidden}
+.dl{padding:2px 8px;white-space:pre-wrap;word-break:break-word} .dl .sg{display:inline-block;width:16px;font-weight:700}
+.dl.add{background:rgba(0,211,90,.14);color:#7ef0ac} .dl.del{background:rgba(255,69,58,.14);color:#ff9c95} .dl.none{color:var(--sec)}
+.seg2{display:flex;background:var(--card2);border-radius:9px;padding:2px;margin-bottom:10px}
+.seg2 button{flex:1;min-height:34px;border-radius:7px;color:var(--sec);font-size:14px} .seg2 button.on{background:#636366;color:var(--text)}
+.cmdlbl{margin:10px 0 6px}
+.cmd{background:#000;border-radius:10px;padding:10px 12px;font:12.5px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all;color:#e5e5ea}
+.copybtn{margin-top:8px;width:100%;min-height:44px;border-radius:10px;background:rgba(0,211,90,.16);color:var(--green);font-weight:600;font-size:16px}

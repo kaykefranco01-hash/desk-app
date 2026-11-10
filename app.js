@@ -113,6 +113,8 @@
     const g = ev.target.closest('[data-go]'); if (g) { ev.preventDefault(); go(g.dataset.go, g.dataset.anchor); return; }
     const r = ev.target.closest('[data-range]'); if (r) { range = r.dataset.range; renderRanges(); loadChart(); return; }
     const inv = ev.target.closest('#invite'); if (inv) { invite(inv.dataset.url); return; }
+    const cp = ev.target.closest('[data-copy]'); if (cp) { copyText(cp.dataset.copy, 'Command copied'); return; }
+    const os = ev.target.closest('[data-pos]'); if (os) { pilotOS = os.dataset.pos; renderAccount(); return; }
     const ro = ev.target.closest('[data-ro]'); if (ro) { toast(ro.dataset.ro); }
   });
   $('btn-search').onclick = () => push('scr-search');
@@ -128,6 +130,42 @@
       const ta = document.createElement('textarea'); ta.value = url; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
     }
     toast('Link copied');
+  }
+  async function copyText(s, msg) {
+    try { await navigator.clipboard.writeText(s); } catch (e) {
+      const ta = document.createElement('textarea'); ta.value = s; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+    }
+    toast(msg);
+  }
+  let pilotOS = 'windows';
+  function pilotCards(pl) {
+    // No secrets here: the desk publishes only status, desk.yaml text/diff and the restart command.
+    if (!pl) return '';
+    const chips = (pl.chips || []).map(c => `<span class="chip ${c.id === 'heartbeat' ? (c.ok ? 'ok' : 'bad') : ''}"><span class="ck">${esc(c.label)}</span> ${esc(c.value)}</span>`).join('');
+    const y = pl.yaml || {}, diff = y.diff || [];
+    const dl = diff.length ? diff.map(d => `<div class="dl ${d.sign === '+' ? 'add' : 'del'}"><span class="sg">${d.sign === '+' ? '+' : '−'}</span>${esc(d.text)}</div>`).join('')
+      : `<div class="dl none">${y.running ? 'No changes. Running desk.yaml matches the desk.' : 'No desk.yaml reported yet (pilot not seen).'}</div>`;
+    const cmds = (pl.restart || {})[pilotOS] || {};
+    const osBtn = k => `<button class="${pilotOS === k ? 'on' : ''}" data-pos="${k}">${{windows: 'Windows', mac: 'macOS', linux: 'Linux'}[k]}</button>`;
+    const cmdBox = (label, c) => c ? `<div class="cmdlbl small sec">${esc(label)}</div><div class="cmd"><code>${esc(c)}</code></div>
+      <button class="copybtn" data-copy="${esc(c)}">Copy command</button>` : '';
+    return `<div class="ghead">Pilot on your PC</div>
+      <div class="chips">${chips}</div>
+      <div class="group">
+        <div class="row"><span class="k">Kill switch</span><span class="v ${pl.halt ? 'red' : 'green'}">${pl.halt ? 'Stopped' : 'Running'}</span></div>
+        <div class="row"><span class="k">Mode</span><span class="v">${esc(pl.mode || '—')}${pl.race ? ' · race' : ''}</span></div>
+        ${pl.raceBlock ? `<div class="setrow small sec">${esc(pl.raceBlock)}</div>` : ''}
+        ${pl.lastError ? `<div class="setrow small red">${esc(pl.lastError)}</div>` : ''}</div>
+      ${viaNote(pl.control, 'pilot stop | pilot start')}
+      <div class="ghead">desk.yaml ${y.diffKind === 'pending' ? '· pending change' : y.diffKind === 'last change' ? '· last change' : ''}</div>
+      <div class="group pad"><div class="diff">${dl}</div>
+        ${y.diffKind === 'pending' ? `<div class="setrow small sec">Applies when you ${esc(y.appliesOn || 'restart pilot.py on your PC')}.</div>` : ''}</div>
+      ${viaNote(y.setVia, 'pilot set budget 150')}
+      <div class="ghead">Restart pilot.py on your PC</div>
+      <div class="group pad"><div class="seg2">${osBtn('windows')}${osBtn('mac')}${osBtn('linux')}</div>
+        ${cmdBox(pilotOS === 'windows' ? 'PowerShell · stop, then start again' : 'Terminal · stop, then start again', cmds.restart)}
+        ${cmdBox('With the race block (--race)', cmds.restartRace)}
+        ${cmdBox('Stop only', cmds.stop)}</div>`;
   }
   const viaNote = (w, extra) => w && w.readOnly
     ? `<div class="ro-note">${w.writeVia === 'none' ? esc(w.note || 'Not available in plan B') : 'Read-only here · use Telegram' + (w.command || extra ? ': <b>' + esc(extra || w.command) + '</b>' : '')}</div>` : '';
@@ -256,6 +294,7 @@
       ${viaNote(tg.testPush)}
       <div class="ghead">Notifications</div><div class="group"><div class="row"><span class="k" style="color:var(--ter)">Enable notifications</span><span class="v small">Not available</span></div></div>
       <div class="ro-note">${esc((acc.webPush && acc.webPush.note) || 'plan B: no web push, Telegram only')}</div>`;
+    h += pilotCards(acc.pilot);
     if (st && st.groups) {
       h += `<div class="ghead">Settings</div>` + viaNote(st, st.command);
       const tc = st.ticketCheck;

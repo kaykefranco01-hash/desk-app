@@ -258,11 +258,15 @@
       <div class="ro-note">${esc((acc.webPush && acc.webPush.note) || 'plan B: no web push, Telegram only')}</div>`;
     if (st && st.groups) {
       h += `<div class="ghead">Settings</div>` + viaNote(st, st.command);
+      const tc = st.ticketCheck;
+      if (tc) h += `<div class="group"><div class="row"><span class="k">Ticket check</span><span class="v num ${tc.status === 'ok' ? 'green' : tc.status === 'bump' ? '' : 'red'}">${tc.status === 'ok' ? 'OK' : esc(tc.status)}</span></div>
+        <div class="row"><span class="k small sec">min stack = ${usd(tc.minTicket)} / ${esc(tc.stackPct)}%</span><span class="v num">${usd(tc.minStack)}</span></div>
+        ${tc.message ? `<div class="setrow small ${tc.status === 'skip' || tc.status === 'no_stack' ? 'red' : 'sec'}">${esc(tc.message)}</div>` : ''}</div>`;
       for (const [g, keys] of Object.entries(st.groups)) {
         h += `<div class="ghead" id="set-${esc(g)}">${esc((st.labels || {})[g] || LBL[g] || g)}</div><div class="group">` +
           Object.entries(keys).map(([k, v]) => setRow(k, v)).join('') + '</div>';
       }
-      if (st.changeLog && st.changeLog.length) h += `<div class="ghead">Change log</div><div class="group">${st.changeLog.slice(0, 10).map(c => `<div class="row"><span class="k small">${esc(c.key || '')}</span><span class="v small num">${esc(c.old)} → ${esc(c.new)} · ${hm(c.time || c.ts_iso)}</span></div>`).join('')}</div>`;
+      if (st.changeLog && st.changeLog.length) h += `<div class="ghead">Change log</div><div class="group">${st.changeLog.slice(0, 10).map(c => `<div class="row"><span class="k small">${esc(c.key || '')}</span><span class="v small num">${esc(c.old)} → ${esc(c.new)} · ${esc(c.who || '')} · ${hm(c.ts)}</span></div>`).join('')}</div>`;
     }
     $('account-body').innerHTML = h;
   }
@@ -273,7 +277,7 @@
     else if (v.kind === 'enum') ctl = `<span class="seg" ${ro}>${(v.choices || []).map(c => `<span class="${c === val ? 'on' : ''}">${esc(c)}</span>`).join('')}</span>`;
     else if (typeof val === 'number' && v.min != null && v.max != null) {
       const step = v.kind === 'int' ? 1 : (v.max - v.min <= 1 ? 0.01 : 'any');
-      return `<div class="setrow" ${ro}><div class="top"><span>${esc(k)}</span><span class="mm">${esc(v.min)}–${esc(v.max)}</span></div>
+      return `<div class="setrow" ${ro}><div class="top"><span>${esc(k)}</span><span class="mm">${esc(v.range || (v.min + '–' + v.max))}</span></div>
         <div class="ctl"><input type="range" min="${v.min}" max="${v.max}" step="${step}" value="${val}" disabled aria-label="${esc(v.key)}"><input class="numf" value="${esc(val)}" disabled aria-label="${esc(v.key)} value"></div></div>`;
     } else ctl = `<input class="numf" value="${esc(val == null ? '' : val)}" disabled aria-label="${esc(v.key)}" style="width:150px">`;
     return `<div class="setrow"><div class="top"><span>${esc(k)}</span>${ctl}</div></div>`;

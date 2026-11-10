@@ -203,7 +203,7 @@
     ORDER.forEach((a, i) => {
       const c = (s.cards || {})[a] || {}, d = ds[i] || {}, p = d.pause || {readOnly: true, writeVia: 'telegram'};
       const locked = p.locked || (a === 'risk' && c.pauseLocked);
-      const cmd = locked ? 'locked while a position is open' : `${c.paused ? 'resume' : 'pause'} ${NAMES[a]}`;
+      const cmd = locked ? 'locked while a position is open' : (p.command || c.pauseCommand || `${c.paused ? 'resume' : 'pause'} ${NAMES[a]}`);
       out.push(`<div class="acard" id="ag-${a}"><div class="acard-h">${dot(c)}<span class="nm" style="color:${COLORS[a]}">${esc(c.title || NAMES[a])}</span>
         <span class="sw-wrap" data-ro="${locked ? 'Risk is locked while a position is open' : 'Read-only here · send “' + cmd + '” in Telegram'}"><span class="switch ro ${c.paused ? '' : 'on'}" role="switch" aria-checked="${!c.paused}" aria-disabled="true"></span></span></div>
         <div class="cnt num">${c.paused ? 'Paused' : c.running ? 'Running' : 'No heartbeat'} · ${d.todayCount == null ? '—' : d.todayCount} today</div>
@@ -252,7 +252,7 @@
       ${sign ? `<button class="row" id="invite" data-url="${esc(sign)}"><span class="k">Invite a friend</span><span class="chev">›</span></button>` : ''}</div>
       <div class="ghead">Telegram</div><div class="group">
       <div class="row"><span class="k">Telegram</span><span class="v ${tg.connected ? 'green' : 'red'}">${tg.connected ? 'Connected' : 'Not connected'}</span></div>
-      <div class="row" data-ro="Read-only here · send “status” in Telegram"><span class="k" style="color:var(--ter)">Send test push</span><span class="v small">via Telegram</span></div></div>
+      <div class="row" data-ro="Read-only here · send “test push” in Telegram"><span class="k" style="color:var(--ter)">Send test push</span><span class="v small">via Telegram</span></div></div>
       ${viaNote(tg.testPush)}
       <div class="ghead">Notifications</div><div class="group"><div class="row"><span class="k" style="color:var(--ter)">Enable notifications</span><span class="v small">Not available</span></div></div>
       <div class="ro-note">${esc((acc.webPush && acc.webPush.note) || 'plan B: no web push, Telegram only')}</div>`;

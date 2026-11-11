@@ -9,6 +9,13 @@
   python pilot.py address      print the wallet's public address
   python pilot.py once         one poll cycle and exit (testing)
   python pilot.py withdraw ADDRESS [SOL|all]   send SOL out of the pilot wallet (asks to confirm)
+  python pilot.py jupiter-key  save your Jupiter API key locally (hidden prompt) -> uses Jupiter Swap v2
+  python pilot.py jupiter-key --remove         delete it again (back to the free keyless v1 path)
+
+Jupiter: with a key (env JUPITER_API_KEY, file jupiter_api_key in this folder, or "jupiter_api_key" in config.json)
+the pilot uses api.jup.ag Swap v2 (GET /order -> sign HERE -> POST /execute, header x-api-key). Without a key it
+keeps the keyless lite-api v1 path (quote -> swap -> sign HERE -> send via RPC). Either way the wallet key never
+leaves this computer, DRY stays the default and nothing is sent unless LIVE (send() is the only exit).
 
 Safety: the private key exists only in wallet.json in this folder (owner-only permissions). It is never printed,
 logged or sent. The desk never sees it. Orders must carry a valid desk Ed25519 signature (pinned at install),
@@ -31,7 +38,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 SOL_MINT = "So11111111111111111111111111111111111111112"
 USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
 LAMPORTS = 1_000_000_000
@@ -45,6 +52,8 @@ DEFAULT_CONFIG = {                     # config.json: local hard limits (the des
     "rpc_url": "https://api.mainnet-beta.solana.com",
     "jupiter_url": "https://lite-api.jup.ag/swap/v1",
     "price_url": "https://lite-api.jup.ag/price/v3",
+    "jupiter_v2_url": "https://api.jup.ag/swap/v2",   # used only when a Jupiter API key is set (see jupiter-key)
+    "price_v2_url": "https://api.jup.ag/price/v3",
     "poll_s": 10,
     "max_trade_pct": 10.0,             # % of current equity per trade
     "max_usd_per_trade": 50.0,         # optional absolute cap (null = none)
@@ -78,6 +87,23 @@ SECRET_LIKE = re.compile(r"[1-9A-HJ-NP-Za-km-z]{60,}|FP1\.|sb_secret|eyJ[A-Za-z0
 
 class ConfigError(ValueError):
     pass
+
+
+JUP_KEY_FILE = "jupiter_api_key"
+
+
+def jupiter_key(home: Path, cfg: dict) -> str | None:
+    """Local Jupiter API key, or None (keyless v1). Never printed, logged or sent anywhere but api.jup.ag."""
+    k = os.environ.get("JUPITER_API_KEY")
+    if not k:
+        try:
+            k = (home / JUP_KEY_FILE).read_text(encoding="utf-8").strip()
+        except OSError:
+            k = None
+    if not k:
+        k = cfg.get("jupiter_api_key")
+    k = (k or "").strip()
+    return k if re.fullmatch(r"[A-Za-z0-9_\-]{16,128}", k) else None
 
 
 # ---------------- small utils ----------------
@@ -357,6 +383,9 @@ class Pilot:
         self._decimals: dict[str, int] = {}
         self._last_hb = 0.0
         self._last_exit_check = 0.0
+        self._jup_key = jupiter_key(home, self.cfg)
+        self.jupiter = "v2" if self._jup_key else "v1-keyless"
+        self._v2_pending: dict[bytes, str] = {}           # signed v2 tx bytes -> Jupiter requestId (for /execute)
 
     # ---- config ----
     def load_yaml(self) -> dict:
@@ -416,7 +445,11 @@ class Pilot:
             return c[0]
         px = None
         try:
-            j = self.http.get(self.cfg["price_url"], params={"ids": SOL_MINT}).json()
+            if self._jup_key:
+                j = self.http.get(self.cfg["price_v2_url"], params={"ids": SOL_MINT},
+                                  headers={"x-api-key": self._jup_key}).json()
+            else:
+                j = self.http.get(self.cfg["price_url"], params={"ids": SOL_MINT}).json()
             px = float(j[SOL_MINT]["usdPrice"])
         except Exception:
             q = self.quote(SOL_MINT, USDC_MINT, LAMPORTS, 50)
@@ -425,6 +458,8 @@ class Pilot:
         return px
 
     def quote(self, inp: str, out: str, amount: int, slippage_bps: int) -> dict:
+        if self._jup_key:
+            return self.order_v2(inp, out, amount, slippage_bps)
         for i in range(4):                                   # keyless Jupiter rate-limits (429): back off briefly
             r = self.http.get(f"{self.cfg['jupiter_url']}/quote", params={
                 "inputMint": inp, "outputMint": out, "amount": str(int(amount)), "slippageBps": str(int(slippage_bps)),
@@ -436,7 +471,61 @@ class Pilot:
             raise RuntimeError(f"jupiter quote HTTP {r.status_code}")
         return r.json()
 
+    def order_v2(self, inp: str, out: str, amount: int, slippage_bps: int) -> dict:
+        """Swap v2 GET /order (taker = this wallet): quote + assembled tx in one call. Normalised to the v1 fields the
+        rest of the pilot reads (inAmount, outAmount, priceImpactPct as a ratio); the tx rides along in _v2."""
+        hdr = {"x-api-key": self._jup_key}
+        params = {"inputMint": inp, "outputMint": out, "amount": str(int(amount)), "slippageBps": str(int(slippage_bps)),
+                  "taker": self.address}
+        for i in range(4):
+            r = self.http.get(f"{self.cfg['jupiter_v2_url']}/order", params=params, headers=hdr)
+            if r.status_code != 429:
+                break
+            time.sleep(2 ** (i + 1))
+        if r.status_code != 200:
+            raise RuntimeError(f"jupiter v2 order HTTP {r.status_code}")
+        o = r.json()
+        if not o.get("outAmount"):
+            raise RuntimeError(f"jupiter v2 order refused: {o.get('router', '?')} code {o.get('errorCode', '?')}")
+        pi = o.get("priceImpact")
+        if isinstance(pi, (int, float)):
+            impact = abs(float(pi)) / 100                       # v2: percentage points -> v1-style ratio
+        else:
+            impact = abs(float(o.get("priceImpactPct") or 0))
+        return {"inAmount": str(o.get("inAmount") or amount), "outAmount": str(o["outAmount"]), "priceImpactPct": str(impact),
+                "slippageBps": o.get("slippageBps", slippage_bps), "inputMint": inp, "outputMint": out,
+                "_v2": {"transaction": o.get("transaction"), "requestId": o.get("requestId"), "router": o.get("router"),
+                        "feeBps": o.get("feeBps"), "prioritizationFeeLamports": o.get("prioritizationFeeLamports"),
+                        "signatureFeePayer": o.get("signatureFeePayer"), "errorCode": o.get("errorCode")}}
+
+    def sign_v2(self, q: dict):
+        """Sign Jupiter's v2 transaction HERE (only our signature slot). Refuses a tx this wallet is not a signer of,
+        a missing requestId, or a priority fee above max_priority_lamports."""
+        from solders.message import to_bytes_versioned
+        from solders.transaction import VersionedTransaction
+        v2 = q["_v2"]
+        if not v2.get("transaction") or not v2.get("requestId"):
+            if not self.is_live():                       # DRY (e.g. empty wallet): the quote is enough, nothing to sign
+                return None
+            raise RuntimeError(f"jupiter v2: no transaction in the order (code {v2.get('errorCode', '?')})")
+        fee = v2.get("prioritizationFeeLamports")
+        if isinstance(fee, (int, float)) and fee > int(self.cfg["max_priority_lamports"]):
+            raise RuntimeError(f"jupiter v2 priority fee {int(fee)} > max {int(self.cfg['max_priority_lamports'])} lamports")
+        tx = VersionedTransaction.from_bytes(base64.b64decode(v2["transaction"]))
+        msg = tx.message
+        n = msg.header.num_required_signatures
+        signers = [str(k) for k in msg.account_keys[:n]]
+        if self.address not in signers:
+            raise RuntimeError("jupiter v2: this wallet is not a signer of the returned transaction")
+        sigs = list(tx.signatures)
+        sigs[signers.index(self.address)] = self.kp.sign_message(to_bytes_versioned(msg))
+        signed = VersionedTransaction.populate(msg, sigs)
+        self._v2_pending = {bytes(signed): v2["requestId"]}       # only the latest order can be executed
+        return signed
+
     def build_swap(self, q: dict):
+        if q.get("_v2"):
+            return self.sign_v2(q)
         from solders.transaction import VersionedTransaction
         body = {"quoteResponse": q, "userPublicKey": self.address, "wrapAndUnwrapSol": True,
                 "dynamicComputeUnitLimit": True, "dynamicSlippage": False,
@@ -453,6 +542,8 @@ class Pilot:
         return VersionedTransaction(tx.message, [self.kp])
 
     def simulate(self, tx) -> str | None:
+        if tx is None:
+            return "jupiter v2 built no transaction (DRY quote only)"
         res = self.rpc("simulateTransaction", [base64.b64encode(bytes(tx)).decode(), {
             "encoding": "base64", "sigVerify": False, "replaceRecentBlockhash": True, "commitment": "processed"}])
         err = res["value"].get("err")
@@ -462,6 +553,20 @@ class Pilot:
         """THE ONLY place a transaction leaves this computer. Reached only when is_live() is true."""
         if not self.is_live():
             raise RuntimeError("send() refused: not LIVE")
+        req = self._v2_pending.pop(bytes(tx), None)
+        if req is not None:                                  # Swap v2: Jupiter lands it (POST /execute)
+            r = self.http.post(f"{self.cfg['jupiter_v2_url']}/execute",
+                               json={"signedTransaction": base64.b64encode(bytes(tx)).decode(), "requestId": req},
+                               headers={"x-api-key": self._jup_key, "content-type": "application/json"})
+            try:
+                res = r.json()
+            except Exception:
+                res = {}
+            if r.status_code == 200 and res.get("status") == "Success" and res.get("signature"):
+                return res["signature"]
+            if res.get("signature"):                         # failed on chain: fee may be paid; finish_live reads it
+                return res["signature"]
+            raise RuntimeError(f"jupiter v2 execute failed: HTTP {r.status_code} code {res.get('code', '?')}")
         return self.rpc("sendTransaction", [base64.b64encode(bytes(tx)).decode(), {
             "encoding": "base64", "skipPreflight": False, "maxRetries": 3, "preflightCommitment": "confirmed"}])
 
@@ -821,7 +926,7 @@ class Pilot:
               "race": race_active(self.y, self.race), "raceBlock": race_blocks_buys(self.y, self.race),
               "budgetUsd": self.y["budget"], "deployedUsd": round(sum(p["cost_usd"] for p in self.positions(live).values()), 2),
               "deskYaml": self.yaml_text, "configRev": self.state.get("config_rev", 0), "limits": lim,
-              "lastError": self.last_error, "os": sys.platform, "keepAwake": IS_WIN}
+              "lastError": self.last_error, "os": sys.platform, "keepAwake": IS_WIN, "jupiter": self.jupiter}
         self._last_hb = now_s()
         return self.write_desk("hb", hb)
 
@@ -893,7 +998,7 @@ def run_loop(race: bool, max_cycles: int | None = None, pilot: Pilot | None = No
                 r = pl.cycle(startup=(n == 0))
                 if n == 0:
                     say(f"mode {'LIVE' if pl.is_live() else 'DRY'} (desk {(pl.desk_payload or {}).get('deskMode', '?')},"
-                        f" config live={pl.cfg.get('live')}) · orders file: {r['status']}")
+                        f" config live={pl.cfg.get('live')}) · jupiter {pl.jupiter} · orders file: {r['status']}")
             except Exception as e:
                 pl.last_error = f"{type(e).__name__}: {str(e)[:120]}"
                 say(f"poll failed: {pl.last_error}")
@@ -968,6 +1073,22 @@ def cmd_status() -> None:
     print(f"config.json: live={cfg['live']} · {cfg['max_trade_pct']:g}% per trade (cap ${cfg['max_usd_per_trade']}) · "
           f"{cfg['max_open_positions']} open · daily loss {cfg['max_daily_loss_pct']:g}% · reserve {cfg['sol_reserve']:g} SOL")
     print("local STOP file: " + ("present (no transactions)" if (HOME / "STOP").exists() else "none"))
+    print("jupiter: " + ("Swap v2 with your API key (api.jup.ag)" if jupiter_key(HOME, cfg) else "keyless v1 (lite-api.jup.ag)"))
+
+
+def cmd_jupiter_key(remove: bool = False) -> None:
+    """Save (or remove) the Jupiter API key in this folder, owner-only. The key is typed hidden, never echoed."""
+    import getpass
+    p = HOME / JUP_KEY_FILE
+    if remove:
+        p.unlink(missing_ok=True)
+        print("Jupiter key removed: the pilot uses keyless v1 after its next restart.")
+        return
+    k = getpass.getpass("Paste your Jupiter API key (hidden): ").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_\-]{16,128}", k):
+        raise SystemExit("That does not look like a Jupiter API key (nothing saved).")
+    secure_write(p, k)
+    print("Jupiter key saved in this folder (only your user can read it). Restart the pilot to use Swap v2.")
 
 
 def cmd_withdraw(to: str, amount: str) -> None:
@@ -1002,11 +1123,13 @@ def main(argv=None) -> None:
         except Exception:
             pass
     ap = argparse.ArgumentParser(prog="pilot.py", description="FOMO desk pilot (DRY by default)")
-    ap.add_argument("command", nargs="?", default="run", choices=["run", "setup", "status", "address", "once", "withdraw"])
+    ap.add_argument("command", nargs="?", default="run", choices=["run", "setup", "status", "address", "once", "withdraw",
+                                                                         "jupiter-key"])
     ap.add_argument("args", nargs="*")
     ap.add_argument("--race", action="store_true", help="apply the race block of desk.yaml")
     ap.add_argument("--stop", action="store_true", help="stop the running pilot")
     ap.add_argument("--status", action="store_true", help="show status")
+    ap.add_argument("--remove", action="store_true", help="with jupiter-key: delete the saved key")
     a = ap.parse_args(argv)
     if a.stop:
         print(stop_running())
@@ -1016,6 +1139,8 @@ def main(argv=None) -> None:
         return
     if a.command == "setup":
         cmd_setup()
+    elif a.command == "jupiter-key":
+        cmd_jupiter_key(a.remove)
     elif a.command == "address":
         print(load_keypair().pubkey())
     elif a.command == "once":

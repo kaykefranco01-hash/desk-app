@@ -9,7 +9,9 @@
   python pilot.py address      print the wallet's public address
   python pilot.py once         one poll cycle and exit (testing)
   python pilot.py withdraw ADDRESS [SOL|all]   send SOL out of the pilot wallet (asks to confirm)
-  python pilot.py jupiter-key  save your Jupiter API key locally (hidden prompt) -> uses Jupiter Swap v2
+  python pilot.py jupiter-key  save your Jupiter API key locally (masked prompt, Ctrl+V/right-click paste, or just
+                               Enter to take it from the clipboard) -> uses Jupiter Swap v2
+  python pilot.py jupiter-key --clipboard      save the key straight from the clipboard (no prompt)
   python pilot.py jupiter-key --remove         delete it again (back to the free keyless v1 path)
 
 Jupiter: with a key (env JUPITER_API_KEY, file jupiter_api_key in this folder, or "jupiter_api_key" in config.json)
@@ -38,7 +40,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 SOL_MINT = "So11111111111111111111111111111111111111112"
 USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
 LAMPORTS = 1_000_000_000
@@ -90,6 +92,7 @@ class ConfigError(ValueError):
 
 
 JUP_KEY_FILE = "jupiter_api_key"
+JUP_KEY_RE = re.compile(r"[A-Za-z0-9_\-]{16,128}")
 
 
 def jupiter_key(home: Path, cfg: dict) -> str | None:
@@ -103,7 +106,7 @@ def jupiter_key(home: Path, cfg: dict) -> str | None:
     if not k:
         k = cfg.get("jupiter_api_key")
     k = (k or "").strip()
-    return k if re.fullmatch(r"[A-Za-z0-9_\-]{16,128}", k) else None
+    return k if JUP_KEY_RE.fullmatch(k) else None
 
 
 # ---------------- small utils ----------------
@@ -126,7 +129,11 @@ def secure_write(path: Path, text: str) -> None:
     fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write(text)
-    os.replace(tmp, path)
+    try:
+        os.replace(tmp, path)
+    except PermissionError:                                # Windows: odd ACL/attrs on an old file -> drop it, retry
+        path.unlink(missing_ok=True)
+        os.replace(tmp, path)
     if IS_WIN:
         user = os.environ.get("USERNAME") or ""
         if user:
@@ -1076,19 +1083,113 @@ def cmd_status() -> None:
     print("jupiter: " + ("Swap v2 with your API key (api.jup.ag)" if jupiter_key(HOME, cfg) else "keyless v1 (lite-api.jup.ag)"))
 
 
-def cmd_jupiter_key(remove: bool = False) -> None:
-    """Save (or remove) the Jupiter API key in this folder, owner-only. The key is typed hidden, never echoed."""
-    import getpass
+def read_clipboard() -> str:
+    """Text on the clipboard ('' if none/unavailable). Used only by jupiter-key; the value is never printed."""
+    if IS_WIN:
+        cmds = [["powershell", "-NoProfile", "-NonInteractive", "-Command", "Get-Clipboard -Raw"]]
+    elif sys.platform == "darwin":
+        cmds = [["pbpaste"]]
+    else:
+        cmds = [["wl-paste", "--no-newline"], ["xclip", "-selection", "clipboard", "-o"], ["xsel", "-b", "-o"]]
+    for c in cmds:
+        try:
+            r = subprocess.run(c, capture_output=True, text=True, timeout=10,
+                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) if IS_WIN else 0)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if r.returncode == 0 and r.stdout:
+            return r.stdout
+    return ""
+
+
+def _clean_key(s: str) -> str:
+    """Drop control chars and bracketed-paste markers, trim outer whitespace. Inner spaces stay (then fail the check)."""
+    s = (s or "").replace("\x1b[200~", "").replace("\x1b[201~", "")
+    return "".join(ch for ch in s if ch.isprintable() or ch in " \t\r\n").strip()
+
+
+def masked_input_windows(prompt: str, msvcrt_mod=None, clipboard=read_clipboard, out=None) -> str:
+    """Windows console prompt that shows one '*' per character, so pasting visibly works.
+    Typed or terminal-pasted (Ctrl+V / right-click in Windows Terminal) chars arrive as keystrokes; a raw Ctrl+V
+    (classic console) reads the clipboard. Backspace deletes, Enter ends, Ctrl+C raises KeyboardInterrupt."""
+    m = msvcrt_mod
+    if m is None:
+        import msvcrt as m                                 # noqa: PLC0415  (Windows only)
+    out = out or sys.stdout
+    out.write(prompt)
+    out.flush()
+    buf: list[str] = []
+    while True:
+        ch = m.getwch()
+        if ch in ("\r", "\n"):
+            break
+        if ch == "\x03":
+            out.write("\n")
+            out.flush()
+            raise KeyboardInterrupt
+        if ch in ("\x00", "\xe0"):                         # arrows/F-keys: two-part code, ignore
+            m.getwch()
+            continue
+        if ch in ("\b", "\x7f"):
+            if buf:
+                buf.pop()
+                out.write("\b \b")
+            out.flush()
+            continue
+        if ch == "\x16":                                   # Ctrl+V reached us: paste from the clipboard
+            add = _clean_key(clipboard())
+        else:
+            add = ch if ch.isprintable() else ""
+        if add:
+            buf.extend(add)
+            out.write("*" * len(add))
+            out.flush()
+    out.write("\n")
+    out.flush()
+    return "".join(buf)
+
+
+def _mask_key(k: str) -> str:
+    return ("jup_" if k.startswith("jup_") else "") + "\u2026" + k[-4:]
+
+
+def cmd_jupiter_key(remove: bool = False, from_clipboard: bool = False) -> None:
+    """Save (or remove) the Jupiter API key in this folder, owner-only. The key is never echoed or printed in full."""
     p = HOME / JUP_KEY_FILE
     if remove:
         p.unlink(missing_ok=True)
         print("Jupiter key removed: the pilot uses keyless v1 after its next restart.")
         return
-    k = getpass.getpass("Paste your Jupiter API key (hidden): ").strip()
-    if not re.fullmatch(r"[A-Za-z0-9_\-]{16,128}", k):
-        raise SystemExit("That does not look like a Jupiter API key (nothing saved).")
+    try:
+        if from_clipboard:
+            k = _clean_key(read_clipboard())
+            if not k:
+                raise SystemExit("The clipboard is empty. Copy the key on portal.jup.ag (copy button) and run this again "
+                                 "(nothing saved).")
+        else:
+            if IS_WIN:
+                k = masked_input_windows("Paste your Jupiter API key (Ctrl+V or right-click; shows ****), then Enter.\n"
+                                         "Or just press Enter to use the key you copied: ")
+            else:
+                import getpass
+                k = getpass.getpass("Paste your Jupiter API key (hidden; or just press Enter to use the clipboard): ")
+            k = _clean_key(k)
+            if not k:
+                k = _clean_key(read_clipboard())
+                if not JUP_KEY_RE.fullmatch(k):
+                    raise SystemExit("Nothing was pasted and the clipboard does not hold a Jupiter key. Copy the key on "
+                                     "portal.jup.ag (copy button) and run this again (nothing saved).")
+                print("Using the key from the clipboard.")
+    except (KeyboardInterrupt, EOFError):
+        raise SystemExit("Cancelled (nothing saved).") from None
+    if not JUP_KEY_RE.fullmatch(k):
+        raise SystemExit(f"That does not look like a Jupiter API key ({len(k)} characters; expected 16-128 letters, "
+                         "digits, _ or -). Copy it again with the copy button on portal.jup.ag (nothing saved).")
     secure_write(p, k)
-    print("Jupiter key saved in this folder (only your user can read it). Restart the pilot to use Swap v2.")
+    print(f"Jupiter key saved ({_mask_key(k)}) in this folder (only your user can read it).")
+    cfg = {**DEFAULT_CONFIG, **(read_json(HOME / "config.json", {}) or {})}
+    print("jupiter: " + ("Swap v2 with your API key (api.jup.ag)" if jupiter_key(HOME, cfg) else "keyless v1 (lite-api.jup.ag)"))
+    print("Restart the pilot to use Swap v2.")
 
 
 def cmd_withdraw(to: str, amount: str) -> None:
@@ -1130,6 +1231,7 @@ def main(argv=None) -> None:
     ap.add_argument("--stop", action="store_true", help="stop the running pilot")
     ap.add_argument("--status", action="store_true", help="show status")
     ap.add_argument("--remove", action="store_true", help="with jupiter-key: delete the saved key")
+    ap.add_argument("--clipboard", action="store_true", help="with jupiter-key: take the key from the clipboard")
     a = ap.parse_args(argv)
     if a.stop:
         print(stop_running())
@@ -1140,7 +1242,7 @@ def main(argv=None) -> None:
     if a.command == "setup":
         cmd_setup()
     elif a.command == "jupiter-key":
-        cmd_jupiter_key(a.remove)
+        cmd_jupiter_key(a.remove, a.clipboard)
     elif a.command == "address":
         print(load_keypair().pubkey())
     elif a.command == "once":

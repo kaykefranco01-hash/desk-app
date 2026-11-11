@@ -594,6 +594,48 @@
     setTimeout(pollDemo, on ? 2000 : 5000);
   }
 
+  // ---------- COPY-PAPER (copytrade/copy_watch.py): its own file, copy.json. A separate VIRTUAL copy-trade book that
+  // follows two public wallets. Never touches the main balance, chart, activity or the night report. Hidden when the
+  // file is missing or cleared (active false). FOMO links pass through from the JSON (links.py) and are never built here.
+  const CP_KIND = {copy_buy: ['Copiou compra', '#0a84ff'], copy_sell: ['Copiou venda', '#00d35a'], stop: ['Stop -18%', '#ff453a'],
+    detected_buy: ['Trader comprou', '#8e7cff'], detected_sell: ['Trader vendeu', '#8e7cff'], seen_sell: ['Trader vendeu', '#2c2c2e'],
+    skip: ['Não copiado', '#2c2c2e'], note: ['Nota', '#2c2c2e']};
+  const ago = iso => { if (!iso) return '—'; const s = Math.max(0, (Date.now() - new Date(iso)) / 1000);
+    return s < 60 ? Math.round(s) + 's' : s < 3600 ? Math.round(s / 60) + ' min' : Math.round(s / 3600) + ' h'; };
+  function renderCopy(j) {
+    const sec = $('copy-sec');
+    if (!j || j.active !== true) { sec.hidden = true; return; }
+    sec.hidden = false;
+    const fresh = j.running && Math.abs(Date.now() / 1000 - Number(j.epoch || 0)) < 120;
+    const pc = j.pnl >= 0 ? 'green' : 'red';
+    const trs = (j.traders || []).map(t => `<div class="cp-tr"><span class="cp-rk">#${esc(t.rank)}</span><span class="cp-m"><div class="t">${esc(t.handle)}</div>
+      <div class="s">${esc(t.wallet)} · última tx ${ago(t.lastTx)} · ${n0(t.swapsSeen)} swaps vistos</div></span>
+      <span class="cp-v">${n0(t.copies)} cópias<div class="s">${n0(t.open)} aberta${t.open === 1 ? '' : 's'}</div></span></div>`).join('');
+    const pos = (j.positions || []).map(p => { const u = safe(p.coin_url), c = p.pnl >= 0 ? 'green' : 'red';
+      const inner = `${av(p.symbol || p.name, p.image, p.mint)}<span class="cp-m"><div class="t">${esc(p.symbol || short(p.mint))} <span class="ter small">${esc(p.trader)}</span></div>
+        <div class="s">entrada ${price(p.entry)} · agora ${price(p.price)} · stop ${price(p.stop)}</div></span>
+        <span class="cp-v ${c}">${usd(p.pnl)}<div class="s">${pct(p.pnlPct)} · ${usd(p.valueUsd)}</div></span>`;
+      return u ? `<a class="cp-tr" href="${esc(u)}" target="_blank" rel="noopener noreferrer">${inner}</a>` : `<div class="cp-tr">${inner}</div>`; }).join('');
+    const ev = (j.events || []).slice(0, 8).map(e => { const [t, col] = CP_KIND[e.kind] || [e.kind, '#2c2c2e'];
+      const v = e.pnl != null ? `<span class="${e.pnl >= 0 ? 'green' : 'red'}">${usd(e.pnl)}</span>` : e.usd != null ? usd(e.usd) : '';
+      return `<div class="cp-tr"><span class="ico" style="width:28px;height:28px;border-radius:50%;flex:none;background:${col}"></span><span class="cp-m"><div class="t">${esc(t)} ${esc(e.symbol || (e.mint ? short(e.mint) : ''))}</div>
+        <div class="s">${esc(e.trader || '')} · ${hm(e.ts)}${e.note ? ' · ' + esc(e.note) : ''}</div></span><span class="cp-v">${v}</span></div>`; }).join('');
+    $('copy-body').innerHTML = `<div class="cp-top"><div><div class="cp-bal num">${usd(j.equity)}</div>
+        <div class="cp-run">virtual · começou com ${usd(j.startUsd)} · ${fresh ? '<b>a vigiar</b>' : '<b class="off">parado</b>'}</div></div>
+        <div class="cp-pnl num ${pc}">${usd(j.pnl)}<div class="small">${pct(j.pnlPct)}</div></div></div>
+      <div class="cp-note">${esc(j.note || '')} Até ${usd(j.maxPerCopy, 0)} por cópia · stop -${esc(j.stopPct)}% · caixa ${usd(j.cash)}</div>
+      <div class="cp-h">Traders seguidos</div>${trs}
+      <div class="cp-h">Posições abertas</div>${pos || '<div class="cp-empty">Nenhuma cópia aberta. À espera que um deles compre.</div>'}
+      <div class="cp-h">Últimos eventos</div>${ev || '<div class="cp-empty">Ainda nada desde o início.</div>'}`;
+  }
+  async function pollCopy() {
+    try {
+      const r = await fetch(`${BASE}/d/${D}/copy.json?t=${Date.now()}`, {cache: 'no-store', referrerPolicy: 'no-referrer'});
+      renderCopy(r.ok ? await r.json() : null);
+    } catch (e) { /* keep what is on screen */ }
+    setTimeout(pollCopy, STATE_S * 1000);
+  }
+
   // ---------- start ----------
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
   renderRanges();
@@ -611,5 +653,5 @@
     $('carousel').innerHTML = ''; return;
   }
   loadingLayout();
-  pollState().then(() => { refreshScreen(); tryGet('index').catch(() => {}); pollEvents(); pollDemo(); });
+  pollState().then(() => { refreshScreen(); tryGet('index').catch(() => {}); pollEvents(); pollDemo(); pollCopy(); });
 })();

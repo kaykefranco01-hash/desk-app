@@ -269,3 +269,19 @@ main{max-width:560px;margin:0 auto;padding:env(safe-area-inset-top) calc(16px + 
 body.demo main{padding-top:calc(env(safe-area-inset-top) + 92px)}
 body.demo .nav-push{top:calc(env(safe-area-inset-top) + 86px)}
 .pill-paper.demo{background:#ff9f0a;outline:2px solid #fff}
+/* COPY-PAPER section (copy.json): a separate virtual book, purple accent so it never reads as the main desk */
+.pill-copy{background:#8e7cff;color:#000;font-weight:700;font-size:12px;padding:3px 9px;border-radius:999px;letter-spacing:.3px}
+.copy-card{background:var(--card);border-radius:18px;padding:14px 16px;border:1px solid rgba(142,124,255,.35)}
+.cp-top{display:flex;align-items:flex-end;justify-content:space-between;gap:10px}
+.cp-bal{font-family:var(--display);font-weight:700;font-size:34px;letter-spacing:-.5px;line-height:1.1}
+.cp-pnl{font-size:15px;font-weight:600;text-align:right}
+.cp-note{font-size:12px;color:var(--sec);margin:6px 0 10px}
+.cp-run{font-size:12px;color:var(--ter)} .cp-run b{color:var(--green);font-weight:600} .cp-run b.off{color:var(--red)}
+.cp-h{font-size:13px;color:var(--sec);margin:14px 0 6px;font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+.cp-tr{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:.5px solid var(--sep)}
+.cp-tr:last-child{border-bottom:0}
+.cp-rk{flex:none;width:34px;height:34px;border-radius:50%;background:#2c2c2e;color:#8e7cff;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center}
+.cp-m{flex:1;min-width:0} .cp-m .t{font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cp-m .s{font-size:12px;color:var(--sec);line-height:1.35}
+.cp-v{flex:none;text-align:right;font-size:14px;white-space:nowrap} .cp-v .s{font-size:12px;color:var(--sec)}
+.cp-empty{font-size:14px;color:var(--sec);padding:8px 0}

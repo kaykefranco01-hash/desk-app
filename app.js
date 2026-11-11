@@ -12,7 +12,7 @@
   const safe = u => (typeof u === 'string' && /^https:\/\/[^\s"'<>]+$/.test(u)) ? u : null;   // pass-through only, never built here
   const ORDER = ['scanner', 'auditor', 'analyst', 'executor', 'risk'];
   const NAMES = {scanner: 'Scanner', auditor: 'Auditor', analyst: 'Analyst', executor: 'Executor', risk: 'Risk'};
-  const COLORS = {scanner: '#64d2ff', auditor: '#ffffff', analyst: '#ffd60a', executor: '#00d35a', risk: '#ff6b9a'};
+  const COLORS = {scanner: '#0a84ff', auditor: '#bf5af2', analyst: '#30d158', executor: '#ff9f0a', risk: '#ff453a'};   // same 5 colours as the Home rows
 
   // ---------- 1. desk link from the fragment -> localStorage, then wipe the fragment ----------
   (function readFragment() {
@@ -30,8 +30,9 @@
     return a >= 1e9 ? '$' + (v / 1e9).toFixed(2) + 'B' : a >= 1e6 ? '$' + (v / 1e6).toFixed(2) + 'M' : a >= 1e3 ? '$' + (v / 1e3).toFixed(1) + 'K' : usd(v); };
   const pct = v => v == null || isNaN(v) ? '—' : (v >= 0 ? '+' : '') + Number(v).toFixed(2) + '%';
   const price = v => { if (v == null || !(v > 0)) return v === 0 ? '$0' : '—'; if (v >= 1) return usd(v, 4); const dp = Math.min(12, 3 - Math.floor(Math.log10(v))); return '$' + Number(v).toFixed(dp); };
-  const hm = iso => iso ? new Date(iso).toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'}) : '—';
-  const hms = d => d ? d.toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit', second: '2-digit'}) : 'never';
+  const TZ = 'Europe/Lisbon';   // every time on screen is Lisbon time
+  const hm = iso => iso ? new Date(iso).toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit', timeZone: TZ}) : '—';
+  const hms = d => d ? d.toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: TZ}) : 'never';
   const short = m => m ? m.slice(0, 4) + '…' + m.slice(-4) : '';
   const left = s => s == null ? '—' : (s >= 3600 ? Math.floor(s / 3600) + 'h ' : '') + Math.floor(s % 3600 / 60) + 'm';
 
@@ -96,10 +97,10 @@
   }
 
   function fitBalance() {
-    const el = $('balance'), row = el.parentNode, pill = $('paper');
+    const el = $('balance'), row = el.parentNode;
     el.style.fontSize = '';
-    const room = row.clientWidth - (pill.hidden ? 0 : pill.offsetWidth + 12);
-    let fs = 66; while (el.scrollWidth > room && fs > 40) { fs -= 2; el.style.fontSize = fs + 'px'; }
+    const room = row.clientWidth;
+    let fs = 64; while (el.scrollWidth > room && fs > 40) { fs -= 2; el.style.fontSize = fs + 'px'; }
   }
   addEventListener('resize', fitBalance);
 
@@ -192,108 +193,134 @@
   }
   function drawChart(c) {
     window.DeskChart.line($('chart'), c);
+    if (range === 'LIVE') profitCheck('chart', (c.marks || []).filter(m => m.kind !== 'bought' && Number(m.usd != null ? m.usd : /^\+/.test(m.label || '') ? 1 : -1) > 0).map(m => 'a:' + (m.mint || '') + ':m' + Math.round(m.ts)));
     $('chart-empty').textContent = c.empty || 'Waiting for the first trade';
     $('chart-empty').hidden = !c.empty && (c.points || []).length > 1;
   }
 
+  // P&L line under the balance: ▲ green when up, ▼ red when down, multiplier badge in the same colour
+  function pnlRow(bal, start, pctV, mult) {
+    const pnl = start != null && bal != null ? bal - start : null, up = (pnl == null ? (pctV || 0) : pnl) >= 0;
+    const t = $('today'); t.classList.remove('skel-i');
+    t.textContent = `${up ? '▲' : '▼'} ${pnl == null ? '—' : usd(Math.abs(pnl))} (${pctV == null ? '—' : Math.abs(Number(pctV)).toFixed(2) + '%'})`;
+    t.className = 'num today ' + (up ? 'green' : 'red');
+    const m = $('mult'); m.classList.remove('skel-i'); m.textContent = Number(mult || 1).toFixed(2) + 'x'; m.classList.toggle('down', !up);
+  }
   function renderState(s) {
     odometer($('balance'), usd(s.balance));
-    const pm = s.mode === 'PAPER' || s.mode === 'DEMO', pl = s.mode === 'DEMO' ? 'DEMO' : 'PAPER';
-    $('paper').textContent = pl; $('coin-paper').textContent = pl; $('paper').classList.toggle('demo', s.mode === 'DEMO');
-    $('paper').hidden = !pm; $('coin-paper').hidden = !pm; fitBalance();
-    const t = $('today'); t.classList.remove('skel-i'); t.textContent = pct(s.today_pct); t.className = 'num today ' + ((s.today_pct || 0) >= 0 ? 'green' : 'red');
-    const m = $('mult'); m.classList.remove('skel-i'); m.textContent = Number(s.multiplier || 1).toFixed(2) + '×';
+    const mode = s.mode === 'DEMO' ? 'DEMO' : s.mode === 'LIVE' ? 'LIVE' : 'PAPER';
+    const fresh = Math.abs(Date.now() - new Date(s.ts).getTime()) < STATE_S * 4000;
+    const mp = $('paper'); mp.className = 'mode-pill ' + mode.toLowerCase() + (fresh ? '' : ' stale');
+    $('mode-t').textContent = mode === 'LIVE' ? 'Live' : mode;
+    $('coin-paper').textContent = mode; $('coin-paper').hidden = mode === 'LIVE'; fitBalance();
+    pnlRow(s.balance, s.night_start, s.today_pct, s.multiplier);
+    $('open-n').textContent = n0(s.open_positions || 0);
     $('updated').textContent = hms(new Date(s.ts));
     const running = ORDER.filter(a => (s.agents || {})[a] && s.agents[a].running).length;
     $('agents-running').textContent = running; $('agents-running').classList.remove('skel-i');
-    const car = $('carousel'), sl = car.scrollLeft;
-    car.innerHTML = ORDER.map(a => card(a, (s.cards || {})[a] || {}, s)).join('');
-    car.scrollLeft = sl; carDots();
+    const hot = demoOn() && DEMO.step ? DEMO.step.agent : null;
+    $('ag-rows').innerHTML = ORDER.map(a => agRow(a, (s.cards || {})[a] || {}, s, hot)).join('');
   }
-  // page dots under the agents carousel: one per card, the one nearest the left edge is on
-  function carDots() {
-    const car = $('carousel'), cards = car.querySelectorAll('.card'), dots = $('car-dots');
-    if (!cards.length) { dots.innerHTML = ''; return; }
-    const step = cards.length > 1 ? cards[1].offsetLeft - cards[0].offsetLeft : 1;
-    const max = car.scrollWidth - car.clientWidth;
-    const i = car.scrollLeft >= max - 2 ? cards.length - 1 : Math.max(0, Math.min(cards.length - 1, Math.round(car.scrollLeft / (step || 1))));
-    if (dots.children.length !== cards.length) dots.innerHTML = Array.from(cards, () => '<i></i>').join('');
-    [...dots.children].forEach((d, k) => d.classList.toggle('on', k === i));
-  }
-  $('carousel').addEventListener('scroll', () => requestAnimationFrame(carDots), {passive: true});
-  addEventListener('resize', carDots);
   function dot(c) { return `<span class="dot ${c.paused ? 'paused' : c.running ? 'on' : ''}"></span>`; }
-  // Agents carousel cards. Every value comes from state.json cards (or demo.json while DEMO runs); missing -> "—" / "à espera".
-  const ICON = {   // one shape + colour per agent, two small eyes
-    scanner: '<path d="M18 2l3.2 5 5.8-1.3-1.3 5.8 5 3.2-5 3.2 1.3 5.8-5.8-1.3L18 34l-3.2-5-5.8 1.3 1.3-5.8-5-3.2 5-3.2L9 5.7l5.8 1.3z" fill="#2ec4b6"/>',
-    auditor: '<path d="M18 3l12 4.5v9c0 7.5-5.2 13.5-12 16.5C11.2 30 6 24 6 16.5v-9z" fill="#e5e5ea"/>',
-    analyst: '<path d="M18 4.5c1.2 0 2.2.6 2.8 1.7l11 19.5c1.2 2.1-.3 4.8-2.8 4.8H7c-2.5 0-4-2.7-2.8-4.8l11-19.5c.6-1.1 1.6-1.7 2.8-1.7z" fill="#ff5a3c"/>',
-    executor: '<path d="M11 29c-4.4 0-7-3-7-6.6 0-3 2-5.4 4.8-6C9 11.7 12.6 8 17.2 8c3.6 0 6.6 2.2 7.8 5.4 4 .2 7 3.4 7 7.6 0 4.6-3.4 8-7.8 8z" fill="#8e7cff"/>',
-    risk: '<path d="M18 3.5l12.5 7.2v14.6L18 32.5 5.5 25.3V10.7z" fill="#ff6b9a"/>',
+  // live clock (Lisbon) in the status row
+  const tick = () => { $('clock').textContent = new Date().toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit', timeZone: TZ}); };
+  tick(); setInterval(tick, 1000);
+  // Agent rows (Grok Terminal look). One colour + icon per agent; every value from state.json cards (or demo.json).
+  const AC = {scanner: '#0a84ff', auditor: '#bf5af2', analyst: '#30d158', executor: '#ff9f0a', risk: '#ff453a'};
+  const ICON = {
+    scanner: '<circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6" opacity=".7"/><path d="M12 12L18 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/>',
+    auditor: '<path d="M12 2.8l7.5 2.8v5.6c0 4.7-3.2 8.4-7.5 10-4.3-1.6-7.5-5.3-7.5-10V5.6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M8.6 12.2l2.4 2.4 4.6-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+    analyst: '<path d="M2.5 12h3l2.2-5.5 3.6 11 3-8 1.9 2.5h5.3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+    executor: '<rect x="5" y="8" width="14" height="11" rx="3.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 8V4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="3.8" r="1.4" fill="currentColor"/><circle cx="9.3" cy="13.3" r="1.5" fill="currentColor"/><circle cx="14.7" cy="13.3" r="1.5" fill="currentColor"/><path d="M3 12.5v3M21 12.5v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+    risk: '<path d="M12 2.8l7.5 2.8v5.6c0 4.7-3.2 8.4-7.5 10-4.3-1.6-7.5-5.3-7.5-10V5.6z" fill="currentColor" opacity=".22"/><path d="M12 2.8l7.5 2.8v5.6c0 4.7-3.2 8.4-7.5 10-4.3-1.6-7.5-5.3-7.5-10V5.6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 7.5v5.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="16.2" r="1.3" fill="currentColor"/>',
   };
-  const SUBC = {scanner: '#64a8ff', auditor: '#64d2ff', analyst: '#ffd60a', executor: '#00d35a', risk: '#ff6b9a'};
-  const icon = a => `<span class="ag-ic"><svg viewBox="0 0 36 36" aria-hidden="true">${ICON[a]}<rect x="14.2" y="15" width="2.2" height="5" rx="1.1" fill="#111"/><rect x="19.6" y="15" width="2.2" height="5" rx="1.1" fill="#111"/></svg></span>`;
+  const icon = a => `<span class="ag-ico" style="color:${AC[a]};background:${AC[a]}22"><svg viewBox="0 0 24 24" aria-hidden="true">${ICON[a]}</svg></span>`;
   const n0 = v => v == null || isNaN(v) ? '—' : Number(v).toLocaleString('en-US');
-  function av(name, img, mint) {   // coin image only if the JSON carries a plain https URL, else the first letter
+  const recent = (iso, s) => iso && Math.abs(Date.now() - new Date(iso).getTime()) < s * 1000;
+  function av(name, img, mint, cls) {   // coin image only if the JSON carries a plain https URL, else a coloured initial
     const u = safe(img), ch = esc(([...String(name || mint || '?').replace(/^[^A-Za-z0-9]+/, '')][0] || '?').toUpperCase());
     let h = 0; for (const x of String(mint || name || '')) h = (h * 31 + x.charCodeAt(0)) >>> 0;
-    return u ? `<span class="cav"><img src="${esc(u)}" alt="" referrerpolicy="no-referrer" loading="lazy"></span>` : `<span class="cav" style="background:hsl(${h % 360} 45% 32%)">${ch}</span>`;
+    return u ? `<span class="cav ${cls || ''}"><img src="${esc(u)}" alt="" referrerpolicy="no-referrer" loading="lazy"></span>` : `<span class="cav ${cls || ''}" style="background:hsl(${h % 360} 55% 38%)">${ch}</span>`;
   }
-  function card(a, c, s) {
-    const st = c.paused ? 'paused' : c.running ? '' : 'no heartbeat';
-    let sub = '', body = '';
+  function agRow(a, c, s, hotAgent) {
+    const off = c.paused ? 'paused' : c.running ? '' : 'no heartbeat';
+    let line = '', val = '', vc = '', hot = false, coin = null;
     if (a === 'scanner') {
-      sub = `${n0(c.pools)} pair${c.pools === 1 ? '' : 's'}`;
-      const f = (c.feed || []).slice(0, 3);
-      body = f.length ? `<div class="sc-list">${f.map(x => {
-        // pill: the coin's score when the JSON has one, else the Scanner verdict itself (never an invented number)
-        const pass = x.verdict !== 'kill', sc = x.score != null && !isNaN(x.score) ? String(Math.round(x.score)) : (pass ? 'pass' : 'kill');
-        const hi = x.score != null && !isNaN(x.score) ? x.score >= 70 : pass;
-        return `<a class="sc-r" data-coin="${esc(x.mint)}" href="#">${av(x.name, x.image, x.mint)}<span class="sc-t"><span class="sc-n">${esc(x.name || short(x.mint))}</span><span class="sc-why ${pass ? 'ok' : ''}">${pass ? '→ auditor' : esc(x.reason || 'killed')}</span></span><span class="spill ${hi ? 'hi' : ''}">${esc(sc)}</span></a>`; }).join('')}</div>`
-        : `<div class="ag-empty"><b>—</b>${esc(c.empty || 'à espera de moedas')}</div>`;
+      const f = (c.feed || [])[0];
+      if (f) { coin = f; line = `<b>${esc(f.name || short(f.mint))}</b> ${f.verdict === 'kill' ? `<span class="red">${esc(f.reason || 'killed')}</span>` : `liq ${usdK(f.liquidityUsd)} <span class="ac">→ auditor</span>`}`; hot = recent(f.ts, 120) && f.verdict !== 'kill'; }
+      else line = esc(c.empty || 'listening for new launches');
+      val = `${n0(c.pools)}<small>pools</small>`;
     } else if (a === 'auditor') {
-      const cur = c.current, strips = cur && cur.strips ? cur.strips : null;
-      const ok = strips ? strips.filter(x => x.state === 'pass').length : null, red = strips && strips.some(x => x.state === 'red');
-      sub = `${n0(c.takenApart)} audited · ${n0(c.rejected)} rejected`;
-      body = `<div class="au-big num ${red ? 'red' : ok === 8 ? 'green' : ''}">${ok == null ? '—' : ok}<span>/8</span></div>
-        <div class="au-strips">${(strips || Array.from({length: 8}, (_, i) => ({n: i + 1, state: 'idle'}))).map(x => `<i class="${x.state === 'pass' ? 'pass' : x.state === 'red' ? 'red' : x.state === 'pending' ? 'pend' : ''}"></i>`).join('')}</div>
-        <div class="ag-line">${cur ? `<a data-audit="${esc(cur.mint)}" href="#"><b>${esc(cur.name || short(cur.mint))}</b> · ${esc(cur.status || '')}</a>` : `<span class="sec">${c.enabled === false ? 'off' : 'à espera'}</span>`}</div>`;
+      const cur = c.current, st = cur && cur.strips, ok = st ? st.filter(x => x.state === 'pass').length : null, red = st && st.some(x => x.state === 'red');
+      if (cur) { coin = cur; line = `<b>${esc(cur.name || short(cur.mint))}</b> ${esc(cur.status || '')}`; hot = !!(st && st.some(x => x.state === 'pending')); }
+      else line = c.enabled === false ? 'off' : 'waiting';
+      val = ok == null ? '<span class="ter">—</span>' : `${ok}<small>/8</small>`; vc = red ? 'red' : ok === 8 ? 'green' : '';
+      if (!st) { val = `${n0(c.rejected)}<small>rejected</small>`; vc = ''; }
     } else if (a === 'analyst') {
-      const sc = c.score, g = c.greenFrom || 70, has = sc != null && !isNaN(sc), pass = has && sc >= g;
-      const nm = c.name || (c.mint ? coinName(c.mint) : '');
-      sub = `${esc(c.mode || 'rules')} · from ${g}`;
-      const R = 34, L = 2 * Math.PI * R, fr = has ? Math.max(0, Math.min(1, sc / 100)) : 0;
-      body = `<div class="an-row"><svg class="an-ring ${has ? (pass ? 'pass' : 'fail') : 'none'}" viewBox="0 0 80 80" aria-label="${has ? 'score ' + sc : 'no score'}">
-          <circle cx="40" cy="40" r="${R}" class="tr"/>${has ? `<circle cx="40" cy="40" r="${R}" class="pg" stroke-dasharray="${(fr * L).toFixed(1)} ${L.toFixed(1)}" transform="rotate(-90 40 40)"/>` : ''}
-          ${has ? (pass ? '<path d="M27 41l9 9 17-19" class="mk"/>' : '<path d="M29 29l22 22M51 29L29 51" class="mk"/>') : '<path d="M30 40h20" class="mk"/>'}</svg>
-        <div class="an-c">${has && (c.mint || nm) ? av(nm, c.image, c.mint) : ''}<div class="an-n">${has ? esc(nm || c.label || '—') : '—'}</div>
-          <div class="an-s ${has ? (pass ? 'green' : 'red') : 'sec'}">${has ? 'score ' + Math.round(sc) : 'à espera'}</div></div></div>`;
+      const has = c.score != null && !isNaN(c.score), nm = c.name || (c.mint ? coinName(c.mint) : '');
+      const pass = c.pass != null ? c.pass : has && c.score >= (c.greenFrom || 70);
+      if (has) { coin = {name: nm, mint: c.mint, image: c.image}; line = `<b>${esc(nm || short(c.mint))}</b> ${c.pass == null && c.score < (c.greenFrom || 70) ? 'scoring…' : pass ? '<span class="green">pass</span>' : '<span class="red">fail</span>'} · from ${esc(c.greenFrom || 70)}`;
+        val = `score ${Math.round(c.score)}`; vc = pass ? 'green' : c.pass === false ? 'red' : ''; hot = recent(c.ts, 120); }
+      else { line = 'waiting'; val = '<span class="ter">—</span>'; }
     } else if (a === 'executor') {
       const l = c.last;
-      sub = `${n0(c.trades)} trade${c.trades === 1 ? '' : 's'}`;
-      body = l ? `<div class="ex-c">${av(l.name, l.image, l.mint)}<span class="sc-t"><span class="ex-n">${esc(l.name || short(l.mint))}</span><span class="ex-a num">${usd(l.sizeUsd)}${l.stackPct != null ? ' · ' + esc(l.stackPct) + '%' : ''}</span></span></div>
-          <div class="ex-btn ${l.status === 'bought' ? 'ok' : 'run'}">${l.status === 'bought' ? '✓ Filled' : esc(l.bar || 'Executing…')}</div>`
-        : `<div class="ex-c"><span class="cav">—</span><span class="sc-t"><span class="ex-n">—</span><span class="ex-a">${c.stackPctSetting != null ? esc(c.stackPctSetting) + '% of stack per trade' : ''}</span></span></div><div class="ex-btn idle">à espera</div>`;
+      if (l) { coin = l; const done = l.status === 'bought';
+        line = done ? `filled <b>${esc(l.name || short(l.mint))}</b> via ${esc(l.venue || (s.mode === 'LIVE' ? 'Jupiter' : 'paper'))}` : `buying <b>${esc(l.name || short(l.mint))}</b>…`;
+        val = usd(l.sizeUsd); vc = done ? '' : 'ac'; hot = !done || recent(l.ts, 120); }
+      else { line = c.stackPctSetting != null ? `${esc(c.stackPctSetting)}% of stack per trade` : 'waiting'; val = '<span class="ter">—</span>'; }
     } else if (a === 'risk') {
-      const g = c.guarding || 0, trail = /trail on/i.test(c.label || '');
-      sub = g ? `guarding ${g}` : 'no position';
-      body = `<div class="rk-big">${esc(c.label || c.lastExit || (g ? 'Guarding' : 'à espera'))}</div>
-        <div class="ag-line sec">${g ? `${g} open position${g === 1 ? '' : 's'} · trail ${trail ? '<b class="green">on</b>' : 'off'}` : 'nenhuma posição aberta'}</div>
-        <div class="pills">${(c.pills || []).map(p => `<span class="pill ${p.color === '#00d35a' ? 'green' : 'red'}">${esc(p.text)}</span>`).join('')}</div>`;
+      const g = c.guarding || 0, stopTxt = c.stopPct != null ? `stop at -${esc(c.stopPct)}%` : esc(((c.pills || [])[0] || {}).text || '');
+      line = g ? `guarding ${g} · ${stopTxt}${/trail on/i.test(c.label || '') ? ' · <span class="green">trail on</span>' : ''}` : ((c.lastExit || c.label) && c.lastExitCoin ? `${esc(String(c.lastExit || c.label).toLowerCase())} <b>${esc(c.lastExitCoin)}</b> · ${stopTxt}` : `no position · ${stopTxt}`);
+      const dd = Number(c.ddPct || 0); val = `DD ${dd.toFixed(1)}%`; vc = dd > 0 ? 'red' : ''; hot = g > 0;
     }
-    return `<div class="card ag-${a}" data-go="agents" data-anchor="ag-${a}"><div class="ag-hd">${icon(a)}<div class="ag-tt"><div class="ag-nm">${esc(NAMES[a])}</div>
-      <div class="ag-sub" style="color:${st ? 'var(--ter)' : SUBC[a]}">• ${st ? esc(st) : sub}</div></div></div>${body}</div>`;
+    if (hotAgent) hot = hotAgent === a;
+    if (off) hot = false;
+    return `<button class="ag-row${hot ? ' hot' : ''}" style="--ac:${AC[a]}" data-go="agents" data-anchor="ag-${a}">${icon(a)}
+      <span class="ag-mid"><span class="ag-nm"><i class="hb ${c.paused ? 'paused' : c.running ? 'on' : ''}"></i>${esc(NAMES[a])}${off ? ` <span class="ter small">· ${esc(off)}</span>` : ''}</span>
+      <span class="ag-ln">${coin ? av(coin.name, coin.image, coin.mint, 'xs') : ''}<span class="ag-tx">${line}</span></span></span>
+      <span class="ag-val num ${vc}">${val}</span></button>`;
   }
-  const ACT_ICO = {bought: ['#0a84ff', 'B'], sold: ['#00d35a', 'S'], stopped: ['#ff453a', 'S'], rejected: ['#2c2c2e', '×']};
+  // Activity rows: coin avatar (image if the JSON has one, else a coloured initial) + a small badge for the kind
+  const ACT_ICO = {bought: ['#0a84ff', '↓'], sold: ['#30d158', '↑'], stopped: ['#ff453a', '×'], rejected: ['#48484a', '×']};
+  const TRADE = ['bought', 'sold', 'stopped'];
   function actRow(r) {
-    const [col, ch] = ACT_ICO[r.kind] || ['#2c2c2e', '·'];
-    const val = r.value || '', cls = r.kind === 'stopped' || /^-/.test(val) ? 'red' : (r.kind === 'sold' && /^\+/.test(val) ? 'green' : 'sec');
+    const [col, ch] = ACT_ICO[r.kind] || ['#48484a', '·'];
+    const val = r.value || '', cls = r.kind === 'stopped' || /^-/.test(val) ? 'red' : (r.kind === 'sold' && /^\+/.test(val) ? 'green' : '');
     const attr = r.mint ? (r.opens === 'coin' ? `data-coin="${esc(r.mint)}"` : `data-audit="${esc(r.mint)}"`) : '';
-    return `<button class="item" ${attr}><span class="ico" style="background:${col};color:${col === '#2c2c2e' ? '#fff' : '#000'}">${ch}</span>
-      <span class="mid"><div class="t">${esc(r.title)}</div><div class="s">${esc(r.subtitle)}</div></span><span class="v num ${cls}">${esc(val.split(' · ')[0])}${val.includes(' · ') ? `<div class="s">${esc(val.split(' · ').slice(1).join(' · '))}</div>` : ''}</span></button>`;
+    const nm = String(r.title || '').replace(/^(Bought|Sold|Stopped|Rejected|Skipped)\s+/, '');
+    const sub = String(r.subtitle || '').replace(/ · /g, ' • ') + (r.tsIso && !/\d\d:\d\d/.test(r.subtitle || '') ? ' • ' + hm(r.tsIso) : '');
+    return `<button class="item act" ${attr}><span class="act-av">${av(nm, r.image, r.mint)}<i class="act-bd" style="background:${col}">${ch}</i></span>
+      <span class="mid"><div class="t">${esc(r.title)}</div><div class="s">${esc(sub)}</div></span><span class="v num ${cls}">${esc(val.split(' · ')[0])}${val.includes(' · ') ? `<div class="s">${esc(val.split(' · ').slice(1).join(' · '))}</div>` : ''}</span></button>`;
   }
   function renderHomeActivity(a) {
-    $('home-activity').innerHTML = a && a.rows && a.rows.length ? a.rows.slice(0, 5).map(actRow).join('') : `<div class="empty-row">${esc((a && a.empty) || 'Nothing yet tonight')}</div>`;
+    const rows = (a && a.rows) || [];
+    $('trades-n').textContent = rows.filter(r => TRADE.includes(r.kind)).length;
+    $('home-activity').innerHTML = rows.length ? rows.slice(0, 6).map(actRow).join('') : `<div class="empty-row">${esc((a && a.empty) || 'No trades yet')}</div>`;
+    profitCheck('act', rows.filter(r => r.kind === 'sold' && /^\+/.test(r.value || '')).map(r => 'a:' + (r.mint || '') + ':' + r.id + ':' + r.title));
+  }
+  // ---------- confetti when a trade closes in profit (never on first load, never with reduced motion) ----------
+  const profitSeen = {}; let confT = 0;
+  function profitCheck(src, keys) {   // one memory per source (activity rows, chart marks): the first look only remembers
+    const seenS = profitSeen[src]; if (!seenS) { profitSeen[src] = new Set(keys); return; }
+    const fresh = keys.filter(k => !seenS.has(k)); fresh.forEach(k => seenS.add(k));
+    if (fresh.length) confetti();
+  }
+  function confetti() {
+    if (RM() || Date.now() - confT < 6000) return; confT = Date.now();
+    const cv = $('confetti'), dpr = window.devicePixelRatio || 1, W = innerWidth, H = innerHeight;
+    cv.width = W * dpr; cv.height = H * dpr; cv.hidden = false;
+    const c = cv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const cols = ['#30d158', '#0a84ff', '#ffd60a', '#ff9f0a', '#bf5af2', '#ffffff'];
+    const ps = Array.from({length: 140}, () => ({x: W / 2 + (Math.random() - .5) * 60, y: H * .28, vx: (Math.random() - .5) * 13, vy: -Math.random() * 13 - 4,
+      r: Math.random() * Math.PI, vr: (Math.random() - .5) * .4, w: 5 + Math.random() * 5, h: 8 + Math.random() * 6, col: cols[Math.random() * cols.length | 0]}));
+    const t0 = performance.now();
+    const step = now => {
+      const k = (now - t0) / 2600; c.clearRect(0, 0, W, H);
+      for (const p of ps) { p.vy += .32; p.vx *= .985; p.x += p.vx; p.y += p.vy; p.r += p.vr;
+        c.save(); c.globalAlpha = Math.max(0, 1 - k * k); c.translate(p.x, p.y); c.rotate(p.r); c.fillStyle = p.col; c.fillRect(-p.w / 2, -p.h / 2, p.w, p.h); c.restore(); }
+      if (k < 1) requestAnimationFrame(step); else { c.clearRect(0, 0, W, H); cv.hidden = true; }
+    };
+    requestAnimationFrame(step);
   }
 
   // ---------- AGENTS TAB ----------
@@ -503,7 +530,7 @@
       Array.from({length: n}, () => '<div class="skel-block" style="height:64px;margin-top:12px"></div>').join('');
   }
   function loadingLayout() {
-    $('carousel').innerHTML = Array.from({length: 2}, () => '<div class="card skel-block"></div>').join('');
+    $('ag-rows').innerHTML = Array.from({length: 5}, () => '<div class="ag-row skel-block"></div>').join('');
     $('home-activity').innerHTML = Array.from({length: 3}, () => '<div class="item"><span class="ico skel-block"></span><span class="mid"><div class="skel-i" style="width:55%">x</div><div class="skel-i" style="width:35%;margin-top:4px">x</div></span></div>').join('');
     $('agents-list').innerHTML = skelBlocks(5).replace(/height:64px/g, 'height:180px');
     $('activity-list').innerHTML = Array.from({length: 6}, () => '<div class="item"><span class="ico skel-block"></span><span class="mid"><div class="skel-i" style="width:55%">x</div></span></div>').join('');
@@ -650,7 +677,7 @@
     loadingLayout(); $('balance').textContent = '—'; $('balance').classList.remove('skel');
     $('today').textContent = ''; $('mult').hidden = true; $('agents-running').textContent = '—'; $('agents-running').classList.remove('skel-i');
     $('home-activity').innerHTML = '<div class="empty-row">Open your desk link once on this device</div>';
-    $('carousel').innerHTML = ''; return;
+    $('ag-rows').innerHTML = ''; return;
   }
   loadingLayout();
   pollState().then(() => { refreshScreen(); tryGet('index').catch(() => {}); pollEvents(); pollDemo(); pollCopy(); });

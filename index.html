@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Desk">
 <meta name="theme-color" content="#000000">
 <meta name="referrer" content="no-referrer">
-<title>Desk</title>
+<title>Grok Terminal</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="stylesheet" href="app.css">
@@ -20,26 +20,29 @@
 <main id="view">
   <!-- HOME -->
   <section id="tab-home" class="tab">
-    <header class="nav">
-      <button class="avatar" data-go="account" aria-label="Account"><span>K</span></button>
-      <button class="brand" data-go="agents">Grok Bot <span class="chev">›</span></button>
+    <header class="gt-top">
+      <div class="gt-title">Grok Terminal</div>
       <button class="icon-btn" id="btn-search" aria-label="Search"><i class="i-search"></i></button>
       <button class="icon-btn" id="btn-bell" aria-label="Notifications"><i class="i-bell"></i><b id="bell-dot" class="bell-dot" hidden></b></button>
     </header>
+    <div class="gt-brandrow">
+      <button class="gt-logo" data-go="account" aria-label="Account"><span>K</span></button>
+      <button class="gt-brand" data-go="agents">Grok Bot <span class="chev">›</span></button>
+      <span id="paper" class="mode-pill paper"><i></i><b id="mode-t">PAPER</b></span>
+    </div>
+    <div class="gt-status"><span class="gt-venue"><span class="gt-sw">⇄</span> fomo <span class="ter">•</span> <span id="open-n" class="num">0</span> open</span><span id="clock" class="num gt-clock"></span></div>
     <div class="err-slot"></div>
     <div class="bal-row">
       <div id="balance" class="balance num skel" aria-live="polite">$000.00</div>
-      <span id="paper" class="pill-paper" hidden>PAPER</span>
     </div>
-    <div class="sub-row"><span id="today" class="num today skel-i">+0.00%</span><span id="mult" class="pill-mult num skel-i">1.00×</span></div>
+    <div class="sub-row"><span id="today" class="num today skel-i">▲ $0.00 (0.00%)</span><span id="mult" class="pill-mult num skel-i">1.00x</span></div>
     <div class="chart-wrap" id="chart-wrap"><canvas id="chart" aria-label="Balance chart"></canvas>
       <div id="chart-empty" class="chart-empty" hidden>Waiting for the first trade</div></div>
     <div class="ranges" id="ranges"><button class="on" data-r="LIVE">LIVE</button><button data-r="1H">1H</button><button data-r="4H">4H</button><button data-r="1D">1D</button><button data-r="1W">1W</button><button data-r="ALL">ALL</button></div>
     <h2 class="h2 row-h ag-h">Agents <span class="ag-run green"><span id="agents-running" class="num skel-i">5</span> running</span></h2>
-    <div id="carousel" class="carousel" aria-label="Agents"></div>
-    <div id="car-dots" class="car-dots" aria-hidden="true"></div>
-    <h2 class="h2 row-h">Activity <button class="see-all" data-go="activity">See all</button></h2>
-    <div id="home-activity" class="list"></div>
+    <div id="ag-rows" class="ag-rows" aria-label="Agents"></div>
+    <h2 class="h2 row-h">Activity <button class="see-all green" data-go="activity"><span id="trades-n" class="num">0</span> trades ›</button></h2>
+    <div id="home-activity" class="list act-list"></div>
     <!-- COPY-PAPER: separate virtual copy-trade book (copy.json). Never mixed with the main balance or activity. -->
     <section id="copy-sec" class="copy-sec" hidden aria-label="COPY-PAPER">
       <h2 class="h2 row-h">Copy trading <span class="pill-copy">COPY-PAPER</span></h2>
@@ -95,6 +98,7 @@
   <button data-go="account"><i class="ic ic-account"></i>Account</button>
 </nav>
 <div id="toast" class="toast" hidden></div>
+<canvas id="confetti" class="confetti" aria-hidden="true" hidden></canvas>
 <script src="chart.js"></script>
 <script src="app.js"></script>
 </body>

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """FOMO desk pilot: runs on YOUR computer, executes the desk's signed signals as Jupiter (Solana) swaps.
 
-  python pilot.py              run (normal; DRY unless desk is LIVE and config.json has "live": true)
+  python pilot.py              run (normal; DRY unless the signed orders file has deskMode LIVE)
   python pilot.py --race       run with the race block of desk.yaml applied
   python pilot.py --stop       stop the running pilot (pid file; never touches other python processes)
   python pilot.py --status     wallet, balance, limits, desk.yaml, running or not
@@ -40,7 +40,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-VERSION = "1.1.1"
+VERSION = "1.1.2"
 SOL_MINT = "So11111111111111111111111111111111111111112"
 USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
 LAMPORTS = 1_000_000_000
@@ -50,7 +50,7 @@ AGENTS = ("scanner", "auditor", "analyst", "executor", "risk")
 MINT_RE = re.compile(r"^[1-9A-HJ-NP-Za-km-z]{32,44}$")
 
 DEFAULT_CONFIG = {                     # config.json: local hard limits (the desk's limits are min()'d with these)
-    "live": False,                     # LIVE needs this true AND desk mode LIVE
+    "live": False,                     # kept for compatibility; 1.1.2 follows signed deskMode + halt
     "rpc_url": "https://api.mainnet-beta.solana.com",
     "jupiter_url": "https://lite-api.jup.ag/swap/v1",
     "price_url": "https://lite-api.jup.ag/price/v3",
@@ -598,8 +598,11 @@ class Pilot:
 
     # ---- modes / halts ----
     def is_live(self) -> bool:
+        """Live execution follows the signed desk orders: deskMode LIVE and the kill switch off.
+        A local STOP file still wins (halted()). The local config 'live' flag is no longer required
+        so the owner's PAPER/LIVE app button can switch the pilot without editing this PC."""
         p = self.desk_payload or {}
-        return bool(self.cfg.get("live") is True and p.get("deskMode") == "LIVE")
+        return bool(p.get("deskMode") == "LIVE" and not p.get("halt"))
 
     def halted(self) -> str | None:
         if (self.home / "STOP").exists():

@@ -1,9 +1,13 @@
 // Desk app (plan B). Reads only the published JSON under d/{DATA_PATH}/ in the public bucket.
 // No key, token or data path is in this file: the path arrives once in the URL fragment (#d=...) and lives in
 // localStorage on the device. Every FOMO link shown is taken verbatim from the JSON (links.py on the server);
-// this file never builds, shortens or wraps one. Write actions are read-only here: they go via Telegram (STEP 9).
+// this file never builds, shortens or wraps one. The PAPER/LIVE button is the only in-app write: it posts to desk-budget with the device login token. Amount is not typed; the panel shows the deposited wallet balance.
 (() => {
   'use strict';
+  // iPhone: block pinch / double-tap / gesture zoom (viewport also has user-scalable=no).
+  document.addEventListener('gesturestart', ev => ev.preventDefault());
+  document.addEventListener('gesturechange', ev => ev.preventDefault());
+  document.addEventListener('dblclick', ev => ev.preventDefault(), {capture: true});
   const BASE = 'https://eaggelbvxpglfxsmcldr.supabase.co/storage/v1/object/public/desk';
   const STATE_S = 15, EVENTS_S = 5, SCREEN_S = 15;
   const $ = id => document.getElementById(id);
@@ -134,11 +138,11 @@
   });
   $('btn-search').onclick = () => push('scr-search');
   $('btn-bell').onclick = () => push('scr-bell');
-  if ($('btn-run')) $('btn-run').onclick = () => openRun();
-  if ($('run-sheet-bg')) $('run-sheet-bg').onclick = () => closeRun();
-  if ($('run-close')) $('run-close').onclick = () => closeRun();
+  if ($('paper')) $('paper').onclick = () => onModeTap();
+  if ($('mode-sheet-bg')) $('mode-sheet-bg').onclick = () => closeMode();
+  if ($('mode-cancel')) $('mode-cancel').onclick = () => closeMode();
+  if ($('mode-confirm')) $('mode-confirm').onclick = () => confirmMode();
   if ($('run-copy')) $('run-copy').onclick = () => { const a = $('run-addr').textContent; if (a) copyText(a, 'Endereço copiado'); };
-  if ($('run-save')) $('run-save').onclick = () => saveRun();
   $('ranges').querySelectorAll('button').forEach(b => { b.dataset.range = b.dataset.r; });
 
   let toastT = 0;
@@ -215,8 +219,14 @@
     odometer($('balance'), usd(s.balance));
     const mode = s.mode === 'DEMO' ? 'DEMO' : s.mode === 'LIVE' ? 'LIVE' : 'PAPER';
     const fresh = Math.abs(Date.now() - new Date(s.ts).getTime()) < STATE_S * 4000;
-    const mp = $('paper'); mp.className = 'mode-pill ' + mode.toLowerCase() + (fresh ? '' : ' stale');
-    $('mode-t').textContent = mode === 'LIVE' ? 'Live' : mode;
+    const mp = $('paper');
+    const r = runOf(s);
+    const can = mode === 'DEMO' ? false : (mode === 'LIVE' ? true : r.canToggle !== false);
+    mp.className = 'mode-pill ' + mode.toLowerCase() + (fresh ? '' : ' stale');
+    mp.disabled = !can && mode !== 'LIVE';
+    mp.setAttribute('aria-disabled', can ? 'false' : 'true');
+    if (mode === 'DEMO') mp.setAttribute('aria-disabled', 'true');
+    $('mode-t').textContent = mode;
     $('coin-paper').textContent = mode; $('coin-paper').hidden = mode === 'LIVE'; fitBalance();
     renderRun(s);
     pnlRow(s.balance, s.night_start, s.today_pct, s.multiplier);
@@ -669,10 +679,9 @@
     setTimeout(pollCopy, STATE_S * 1000);
   }
 
-  // ---------- Run (daily budget + public wallet). The wallet secret stays on the owner's computer. ----------
-  const BUDGET_FN = 'https://eaggelbvxpglfxsmcldr.supabase.co/functions/v1/desk-budget';
+  // ---------- Wallet deposit on the panel + PAPER/LIVE toggle (the pill itself). ----------
+  const APP_FN = 'https://eaggelbvxpglfxsmcldr.supabase.co/functions/v1/desk-budget';
   const PUBLIC_WALLET = '6JWGDxCUG7rzNTdH7caaG56aNFbCqCXFAYGijCWvZbSQ';
-  const todayLisbon = () => new Date().toLocaleDateString('en-CA', {timeZone: TZ});
   function runOf(s) { return (s && s.run) || {}; }
   function walletLine(w) {
     if (!w || w.sol == null || isNaN(w.sol)) return 'Carteira do bot: —';
@@ -680,61 +689,82 @@
     const when = w.ts ? ' · atualizado ' + hm(w.ts) : '';
     return 'Carteira do bot: ' + sol + ' SOL ≈ ' + usd(w.usd) + when;
   }
+  function walletBal(w) {
+    if (!w || (w.usd == null && w.sol == null)) return '$0.00 · — SOL';
+    const sol = w.sol == null ? '—' : Number(w.sol).toLocaleString('en-US', {maximumFractionDigits: 4, minimumFractionDigits: 0});
+    return usd(w.usd) + ' · ' + sol + ' SOL';
+  }
   function renderRun(s) {
     const r = runOf(s), mode = (s.mode === 'LIVE' ? 'LIVE' : s.mode === 'DEMO' ? 'DEMO' : 'PAPER');
-    const cap = r.budgetUsd != null ? r.budgetUsd : 100;
-    const tag = r.budgetSet ? '' : ' (predefinição)';
-    if ($('run-budget')) $('run-budget').textContent = mode + ' · orçamento de hoje ' + usd(cap, 0) + tag;
+    if ($('run-budget')) $('run-budget').textContent = walletBal(r.wallet);
     if ($('run-wallet')) $('run-wallet').textContent = walletLine(r.wallet);
-    if ($('run-sheet-mode')) $('run-sheet-mode').textContent = mode;
-    if ($('run-sheet-wallet')) $('run-sheet-wallet').textContent = walletLine(r.wallet);
     const addr = (r.wallet && r.wallet.address) || PUBLIC_WALLET;
     if ($('run-addr')) $('run-addr').textContent = addr;
+    const hint = $('mode-hint');
+    if (hint) {
+      let msg = '';
+      if (mode === 'DEMO') msg = '';
+      else if (mode === 'LIVE') msg = 'LIVE · toca no botão para voltar a PAPER e parar o piloto.';
+      else if (r.disableReason) msg = r.disableReason;
+      hint.textContent = msg;
+      hint.hidden = !msg;
+    }
   }
-  function openRun() {
+  let modePending = null;
+  function onModeTap() {
     const s = cache.state || {}, r = runOf(s);
-    if ($('run-date')) $('run-date').value = r.date || todayLisbon();
-    if ($('run-usd')) $('run-usd').value = (r.budgetSet && r.savedUsd != null) ? r.savedUsd : (r.budgetUsd != null ? r.budgetUsd : 100);
-    if ($('run-sheet-err')) { $('run-sheet-err').hidden = true; $('run-sheet-err').textContent = ''; }
-    renderRun(s);
-    $('run-sheet').hidden = false;
-    try { $('run-usd').focus(); } catch (e) {}
+    const mode = s.mode === 'LIVE' ? 'LIVE' : s.mode === 'DEMO' ? 'DEMO' : 'PAPER';
+    if (mode === 'DEMO') return;
+    if (mode === 'PAPER' && r.canToggle === false) {
+      toast(r.disableReason || 'Não dá para passar a LIVE agora.');
+      return;
+    }
+    modePending = mode === 'LIVE' ? 'paper' : 'live';
+    if (modePending === 'live') {
+      $('mode-sheet-t').textContent = 'Negociar com dinheiro real';
+      $('mode-sheet-msg').textContent = 'Vais negociar com dinheiro real. Confirmar?';
+      $('mode-confirm').textContent = 'Confirmar';
+    } else {
+      $('mode-sheet-t').textContent = 'Voltar a PAPER';
+      $('mode-sheet-msg').textContent = 'Parar e voltar a PAPER? O piloto deixa de negociar.';
+      $('mode-confirm').textContent = 'Parar';
+    }
+    if ($('mode-sheet-err')) { $('mode-sheet-err').hidden = true; $('mode-sheet-err').textContent = ''; }
+    $('mode-sheet').hidden = false;
   }
-  function closeRun() { if ($('run-sheet')) $('run-sheet').hidden = true; }
-  function runErr(msg) { const e = $('run-sheet-err'); e.textContent = msg; e.hidden = !msg; }
-  async function saveRun() {
-    const usdV = $('run-usd').value, dateV = $('run-date').value || todayLisbon();
-    const n = Number(String(usdV).replace(',', '.').replace('$', '').replace(/\s/g, ''));
-    if (!(n > 0) || n > 100000) { runErr('Escreve um valor em USD entre 1 e 100 000.'); return; }
-    runErr('');
-    const body = {usd: n, date: dateV, id: 'r' + Date.now().toString(36)};
+  function closeMode() { if ($('mode-sheet')) $('mode-sheet').hidden = true; modePending = null; }
+  function modeErr(msg) { const e = $('mode-sheet-err'); if (!e) return; e.textContent = msg; e.hidden = !msg; }
+  async function confirmMode() {
+    const action = modePending;
+    if (action !== 'live' && action !== 'paper') return;
+    modeErr('');
+    const body = {action: action, id: 'm' + Date.now().toString(36)};
     const tok = localStorage.getItem('desk_t'), path = localStorage.getItem('desk_d');
     const headers = {'content-type': 'application/json'};
     if (tok) headers['authorization'] = 'Bearer ' + tok;
     if (path) headers['x-desk-path'] = path;
-    let saved = false;
+    let sent = false;
     if (path || tok) {
       try {
-        const r = await fetch(BUDGET_FN, {method: 'POST', headers, body: JSON.stringify(body), referrerPolicy: 'no-referrer'});
-        if (r.status === 200) saved = true;
-        else if (r.status === 401) saved = false;
-        else { const j = await r.json().catch(() => ({})); if (j && j.error) { runErr(String(j.error)); return; } }
-      } catch (e) { /* fall through to Telegram */ }
+        const r = await fetch(APP_FN, {method: 'POST', headers, body: JSON.stringify(body), referrerPolicy: 'no-referrer'});
+        if (r.status === 200) sent = true;
+        else if (r.status === 401) sent = false;
+        else { const j = await r.json().catch(() => ({})); if (j && j.error) { modeErr(String(j.error)); return; } }
+      } catch (e) { /* fall through */ }
     }
-    if (saved) {
-      toast('Orçamento enviado. Confirmamos no Telegram.');
-      closeRun();
+    if (sent) {
+      toast(action === 'live' ? 'A passar a LIVE…' : 'A voltar a PAPER…');
+      closeMode();
+      const want = action === 'live' ? 'LIVE' : 'PAPER';
       const t0 = Date.now();
       const wait = setInterval(async () => {
-        try { const s = await get('state'); renderRun(s); if (s.run && s.run.budgetSet && Number(s.run.savedUsd) === n) clearInterval(wait); } catch (e) {}
+        try { const s = await get('state'); renderState(s); if (s.mode === want) clearInterval(wait); } catch (e) {}
         if (Date.now() - t0 > 25000) clearInterval(wait);
       }, 3000);
       return;
     }
-    const cmd = 'budget ' + n + ' for ' + dateV;
-    try { await copyText(cmd, 'Comando copiado'); } catch (e) {}
-    runErr('Copia e envia isto no Telegram ao bot da mesa:  ' + cmd);
-    try { location.href = 'https://t.me/tetris2kbot'; } catch (e) {}
+    const cmd = action === 'live' ? 'LIVE' : 'paper';
+    modeErr('Não consegui enviar o pedido. Se o piloto e a carteira estiverem prontos, envia no Telegram ao bot da mesa:  ' + cmd);
   }
 
   // ---------- start ----------

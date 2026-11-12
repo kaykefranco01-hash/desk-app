@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -28,12 +28,17 @@
     <div class="gt-brandrow">
       <button class="gt-logo" data-go="account" aria-label="Account"><span>K</span></button>
       <button class="gt-brand" data-go="agents">Grok Bot <span class="chev">›</span></button>
-      <span id="paper" class="mode-pill paper"><i></i><b id="mode-t">PAPER</b></span>
+      <button type="button" id="paper" class="mode-pill paper" aria-label="Mudar entre PAPER e LIVE"><i></i><b id="mode-t">PAPER</b></button>
     </div>
     <div class="gt-run">
-      <button type="button" class="btn-run" id="btn-run">Run</button>
-      <div id="run-budget" class="run-line">PAPER · orçamento de hoje $100</div>
+      <div id="run-budget" class="run-bal">$0.00 · 0 SOL</div>
       <div id="run-wallet" class="run-line ter">Carteira do bot: —</div>
+      <div class="addr-box panel-addr">
+        <code id="run-addr" class="addr-val"></code>
+        <button type="button" class="btn-copy" id="run-copy">Copiar</button>
+      </div>
+      <p class="run-note">Manda SOL para este endereço. O valor aparece aqui sozinho.</p>
+      <div id="mode-hint" class="run-line" hidden></div>
     </div>
     <div class="gt-status"><span class="gt-venue"><span class="gt-sw">⇄</span> fomo <span class="ter">•</span> <span id="open-n" class="num">0</span> open</span><span id="clock" class="num gt-clock"></span></div>
     <div class="err-slot"></div>
@@ -104,25 +109,15 @@
 </nav>
 <div id="toast" class="toast" hidden></div>
 <canvas id="confetti" class="confetti" aria-hidden="true" hidden></canvas>
-<div id="run-sheet" class="sheet" hidden>
-  <div class="sheet-bg" id="run-sheet-bg"></div>
-  <div class="sheet-panel" role="dialog" aria-labelledby="run-sheet-t" aria-modal="true">
+<div id="mode-sheet" class="sheet" hidden>
+  <div class="sheet-bg" id="mode-sheet-bg"></div>
+  <div class="sheet-panel" role="dialog" aria-labelledby="mode-sheet-t" aria-modal="true">
     <div class="sheet-grab"></div>
-    <h2 id="run-sheet-t" class="sheet-t">Orçamento do dia</h2>
-    <p class="sheet-mode">Modo atual: <b id="run-sheet-mode">PAPER</b>. Isto não passa a dinheiro real.</p>
-    <label class="sheet-lab" for="run-usd">Quanto pode o bot negociar neste dia? (USD)</label>
-    <input id="run-usd" class="sheet-in" type="number" inputmode="decimal" min="1" max="100000" step="1" placeholder="100" value="100">
-    <label class="sheet-lab" for="run-date">Dia (hora de Lisboa)</label>
-    <input id="run-date" class="sheet-in" type="date">
-    <div id="run-sheet-wallet" class="run-line">Carteira do bot: —</div>
-    <div class="addr-box">
-      <code id="run-addr" class="addr-val"></code>
-      <button type="button" class="btn-copy" id="run-copy">Copiar</button>
-    </div>
-    <p class="sheet-note">Manda SOL para este endereço para o bot negociar. Só a chave pública aparece aqui.</p>
-    <p id="run-sheet-err" class="sheet-err" hidden></p>
-    <button type="button" class="btn-fomo" id="run-save">Guardar</button>
-    <button type="button" class="btn-secondary" id="run-close">Fechar</button>
+    <h2 id="mode-sheet-t" class="sheet-t">Negociar com dinheiro real</h2>
+    <p id="mode-sheet-msg" class="sheet-mode">Vais negociar com dinheiro real. Confirmar?</p>
+    <p id="mode-sheet-err" class="sheet-err" hidden></p>
+    <button type="button" class="btn-fomo" id="mode-confirm">Confirmar</button>
+    <button type="button" class="btn-secondary" id="mode-cancel">Cancelar</button>
   </div>
 </div>
 <script src="chart.js"></script>

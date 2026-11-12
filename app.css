@@ -9,8 +9,9 @@
   --cw:calc(min(100vw,560px) - 32px);
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;background:var(--bg);color:var(--text);font-family:var(--textf);font-size:17px;
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:var(--textf);font-size:17px;touch-action:manipulation;
   -webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums}
+input,select,textarea{font-size:16px}
 .num,input,td{font-variant-numeric:tabular-nums}
 button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
 a{color:inherit;text-decoration:none}
@@ -292,9 +293,12 @@ body.demo .nav-push{top:calc(env(safe-area-inset-top) + 86px)}
 .gt-brandrow{display:flex;align-items:center;gap:10px;min-height:44px}
 .gt-logo{width:30px;height:30px;border-radius:50%;background:#fff;color:#000;font-weight:800;font-size:14px;display:flex;align-items:center;justify-content:center;flex:none}
 .gt-brand{flex:1;text-align:left;font-weight:700;font-size:18px;min-height:44px}
+button.mode-pill{appearance:none;-webkit-appearance:none;border:0;font:inherit;min-height:44px;padding:6px 16px;cursor:pointer}
+button.mode-pill[disabled],button.mode-pill[aria-disabled="true"]{opacity:.45;cursor:not-allowed}
 .mode-pill{display:inline-flex;align-items:center;gap:7px;padding:6px 13px;border-radius:999px;font-size:14px;font-weight:700;flex:none;
   background:rgba(48,209,88,.12);color:var(--green);box-shadow:inset 0 0 0 1px rgba(48,209,88,.28)}
 .mode-pill i{width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 8px currentColor;animation:livepulse 1.6s ease-in-out infinite}
+.mode-pill.live{background:rgba(48,209,88,.16);color:var(--green);box-shadow:inset 0 0 0 1px rgba(48,209,88,.4)}
 .mode-pill.paper{background:rgba(255,214,10,.10);color:var(--yellow);box-shadow:inset 0 0 0 1px rgba(255,214,10,.35)}
 .mode-pill.paper i{background:var(--green);box-shadow:0 0 8px var(--green)}
 .mode-pill.demo{background:#ff9f0a;color:#000;box-shadow:none} .mode-pill.demo i{background:#000;box-shadow:none}
@@ -346,13 +350,14 @@ body.demo .nav-push{top:calc(env(safe-area-inset-top) + 86px)}
 body.demo .gt-top{margin-top:0}
 @media (prefers-reduced-motion:reduce){.mode-pill i{animation:none}.ag-row{transition:none}}
 
-/* ---------- Run button + daily-budget sheet (below the PAPER pill) ---------- */
+/* ---------- Wallet deposit on the panel + PAPER/LIVE confirm sheet ---------- */
 .gt-run{margin:10px 0 8px;display:flex;flex-direction:column;gap:8px}
-.btn-run{width:100%;min-height:48px;border-radius:14px;font-weight:700;font-size:17px;letter-spacing:-.2px;
-  background:rgba(255,214,10,.10);color:var(--yellow);box-shadow:inset 0 0 0 1px rgba(255,214,10,.35)}
-.btn-run:active{background:rgba(255,214,10,.18)}
+.run-bal{font-family:var(--display);font-weight:700;font-size:22px;letter-spacing:-.3px;line-height:1.2;font-variant-numeric:tabular-nums}
 .run-line{font-size:14px;font-weight:600;color:var(--sec);line-height:1.35}
 .run-line b{color:var(--text);font-weight:700}
+.run-note{font-size:13px;color:var(--sec);margin:0;line-height:1.4}
+.panel-addr{margin:0}
+#mode-hint{color:var(--yellow)}
 .sheet{position:fixed;inset:0;z-index:30;display:flex;flex-direction:column;justify-content:flex-end}
 .sheet-bg{position:absolute;inset:0;background:rgba(0,0,0,.62)}
 .sheet-panel{position:relative;max-width:560px;width:100%;margin:0 auto;background:#141416;border-radius:22px 22px 0 0;
@@ -374,4 +379,3 @@ body.demo .gt-top{margin-top:0}
 .sheet-err{color:var(--red);font-size:14px;font-weight:600;margin:0 0 8px}
 .sheet .btn-fomo{margin:12px 0 0}
 .sheet .btn-secondary{margin:8px 0 0;color:var(--sec)}
-@media (prefers-reduced-motion:reduce){.btn-run{transition:none}}

@@ -345,3 +345,33 @@ body.demo .nav-push{top:calc(env(safe-area-inset-top) + 86px)}
 .confetti{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:40}
 body.demo .gt-top{margin-top:0}
 @media (prefers-reduced-motion:reduce){.mode-pill i{animation:none}.ag-row{transition:none}}
+
+/* ---------- Run button + daily-budget sheet (below the PAPER pill) ---------- */
+.gt-run{margin:10px 0 8px;display:flex;flex-direction:column;gap:8px}
+.btn-run{width:100%;min-height:48px;border-radius:14px;font-weight:700;font-size:17px;letter-spacing:-.2px;
+  background:rgba(255,214,10,.10);color:var(--yellow);box-shadow:inset 0 0 0 1px rgba(255,214,10,.35)}
+.btn-run:active{background:rgba(255,214,10,.18)}
+.run-line{font-size:14px;font-weight:600;color:var(--sec);line-height:1.35}
+.run-line b{color:var(--text);font-weight:700}
+.sheet{position:fixed;inset:0;z-index:30;display:flex;flex-direction:column;justify-content:flex-end}
+.sheet-bg{position:absolute;inset:0;background:rgba(0,0,0,.62)}
+.sheet-panel{position:relative;max-width:560px;width:100%;margin:0 auto;background:#141416;border-radius:22px 22px 0 0;
+  padding:10px 20px calc(20px + env(safe-area-inset-bottom));box-shadow:0 -16px 40px rgba(0,0,0,.45);
+  max-height:min(92vh,720px);overflow:auto}
+.sheet-grab{width:36px;height:5px;border-radius:99px;background:rgba(255,255,255,.22);margin:4px auto 14px}
+.sheet-t{font-family:var(--display);font-size:24px;font-weight:700;letter-spacing:-.3px;margin:0 0 8px}
+.sheet-mode{font-size:15px;color:var(--sec);margin:0 0 16px;line-height:1.4}
+.sheet-mode b{color:var(--yellow)}
+.sheet-lab{display:block;font-size:13px;font-weight:600;color:var(--sec);margin:12px 0 6px}
+.sheet-in{width:100%;min-height:48px;border-radius:12px;background:#232326;color:#fff;border:0;padding:0 14px;font:inherit;font-weight:600;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+.sheet-in:focus{outline:none;box-shadow:inset 0 0 0 1.5px var(--yellow)}
+.addr-box{display:flex;align-items:center;gap:10px;margin:10px 0 8px;padding:12px 12px;border-radius:12px;background:#232326;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+.addr-val{flex:1;font-family:var(--mono);font-size:12px;line-height:1.4;word-break:break-all;color:var(--text)}
+.btn-copy{flex:none;min-height:36px;padding:0 12px;border-radius:10px;background:rgba(255,214,10,.12);color:var(--yellow);font-weight:700;font-size:14px}
+.sheet-note{font-size:14px;color:var(--sec);margin:0 0 8px;line-height:1.4}
+.sheet-err{color:var(--red);font-size:14px;font-weight:600;margin:0 0 8px}
+.sheet .btn-fomo{margin:12px 0 0}
+.sheet .btn-secondary{margin:8px 0 0;color:var(--sec)}
+@media (prefers-reduced-motion:reduce){.btn-run{transition:none}}

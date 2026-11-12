@@ -30,6 +30,11 @@
       <button class="gt-brand" data-go="agents">Grok Bot <span class="chev">›</span></button>
       <span id="paper" class="mode-pill paper"><i></i><b id="mode-t">PAPER</b></span>
     </div>
+    <div class="gt-run">
+      <button type="button" class="btn-run" id="btn-run">Run</button>
+      <div id="run-budget" class="run-line">PAPER · orçamento de hoje $100</div>
+      <div id="run-wallet" class="run-line ter">Carteira do bot: —</div>
+    </div>
     <div class="gt-status"><span class="gt-venue"><span class="gt-sw">⇄</span> fomo <span class="ter">•</span> <span id="open-n" class="num">0</span> open</span><span id="clock" class="num gt-clock"></span></div>
     <div class="err-slot"></div>
     <div class="bal-row">
@@ -99,6 +104,27 @@
 </nav>
 <div id="toast" class="toast" hidden></div>
 <canvas id="confetti" class="confetti" aria-hidden="true" hidden></canvas>
+<div id="run-sheet" class="sheet" hidden>
+  <div class="sheet-bg" id="run-sheet-bg"></div>
+  <div class="sheet-panel" role="dialog" aria-labelledby="run-sheet-t" aria-modal="true">
+    <div class="sheet-grab"></div>
+    <h2 id="run-sheet-t" class="sheet-t">Orçamento do dia</h2>
+    <p class="sheet-mode">Modo atual: <b id="run-sheet-mode">PAPER</b>. Isto não passa a dinheiro real.</p>
+    <label class="sheet-lab" for="run-usd">Quanto pode o bot negociar neste dia? (USD)</label>
+    <input id="run-usd" class="sheet-in" type="number" inputmode="decimal" min="1" max="100000" step="1" placeholder="100" value="100">
+    <label class="sheet-lab" for="run-date">Dia (hora de Lisboa)</label>
+    <input id="run-date" class="sheet-in" type="date">
+    <div id="run-sheet-wallet" class="run-line">Carteira do bot: —</div>
+    <div class="addr-box">
+      <code id="run-addr" class="addr-val"></code>
+      <button type="button" class="btn-copy" id="run-copy">Copiar</button>
+    </div>
+    <p class="sheet-note">Manda SOL para este endereço para o bot negociar. Só a chave pública aparece aqui.</p>
+    <p id="run-sheet-err" class="sheet-err" hidden></p>
+    <button type="button" class="btn-fomo" id="run-save">Guardar</button>
+    <button type="button" class="btn-secondary" id="run-close">Fechar</button>
+  </div>
+</div>
 <script src="chart.js"></script>
 <script src="app.js"></script>
 </body>

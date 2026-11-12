@@ -134,6 +134,11 @@
   });
   $('btn-search').onclick = () => push('scr-search');
   $('btn-bell').onclick = () => push('scr-bell');
+  if ($('btn-run')) $('btn-run').onclick = () => openRun();
+  if ($('run-sheet-bg')) $('run-sheet-bg').onclick = () => closeRun();
+  if ($('run-close')) $('run-close').onclick = () => closeRun();
+  if ($('run-copy')) $('run-copy').onclick = () => { const a = $('run-addr').textContent; if (a) copyText(a, 'Endereço copiado'); };
+  if ($('run-save')) $('run-save').onclick = () => saveRun();
   $('ranges').querySelectorAll('button').forEach(b => { b.dataset.range = b.dataset.r; });
 
   let toastT = 0;
@@ -213,6 +218,7 @@
     const mp = $('paper'); mp.className = 'mode-pill ' + mode.toLowerCase() + (fresh ? '' : ' stale');
     $('mode-t').textContent = mode === 'LIVE' ? 'Live' : mode;
     $('coin-paper').textContent = mode; $('coin-paper').hidden = mode === 'LIVE'; fitBalance();
+    renderRun(s);
     pnlRow(s.balance, s.night_start, s.today_pct, s.multiplier);
     $('open-n').textContent = n0(s.open_positions || 0);
     $('updated').textContent = hms(new Date(s.ts));
@@ -663,6 +669,74 @@
     setTimeout(pollCopy, STATE_S * 1000);
   }
 
+  // ---------- Run (daily budget + public wallet). The wallet secret stays on the owner's computer. ----------
+  const BUDGET_FN = 'https://eaggelbvxpglfxsmcldr.supabase.co/functions/v1/desk-budget';
+  const PUBLIC_WALLET = '6JWGDxCUG7rzNTdH7caaG56aNFbCqCXFAYGijCWvZbSQ';
+  const todayLisbon = () => new Date().toLocaleDateString('en-CA', {timeZone: TZ});
+  function runOf(s) { return (s && s.run) || {}; }
+  function walletLine(w) {
+    if (!w || w.sol == null || isNaN(w.sol)) return 'Carteira do bot: —';
+    const sol = Number(w.sol).toLocaleString('en-US', {maximumFractionDigits: 4, minimumFractionDigits: 0});
+    const when = w.ts ? ' · atualizado ' + hm(w.ts) : '';
+    return 'Carteira do bot: ' + sol + ' SOL ≈ ' + usd(w.usd) + when;
+  }
+  function renderRun(s) {
+    const r = runOf(s), mode = (s.mode === 'LIVE' ? 'LIVE' : s.mode === 'DEMO' ? 'DEMO' : 'PAPER');
+    const cap = r.budgetUsd != null ? r.budgetUsd : 100;
+    const tag = r.budgetSet ? '' : ' (predefinição)';
+    if ($('run-budget')) $('run-budget').textContent = mode + ' · orçamento de hoje ' + usd(cap, 0) + tag;
+    if ($('run-wallet')) $('run-wallet').textContent = walletLine(r.wallet);
+    if ($('run-sheet-mode')) $('run-sheet-mode').textContent = mode;
+    if ($('run-sheet-wallet')) $('run-sheet-wallet').textContent = walletLine(r.wallet);
+    const addr = (r.wallet && r.wallet.address) || PUBLIC_WALLET;
+    if ($('run-addr')) $('run-addr').textContent = addr;
+  }
+  function openRun() {
+    const s = cache.state || {}, r = runOf(s);
+    if ($('run-date')) $('run-date').value = r.date || todayLisbon();
+    if ($('run-usd')) $('run-usd').value = (r.budgetSet && r.savedUsd != null) ? r.savedUsd : (r.budgetUsd != null ? r.budgetUsd : 100);
+    if ($('run-sheet-err')) { $('run-sheet-err').hidden = true; $('run-sheet-err').textContent = ''; }
+    renderRun(s);
+    $('run-sheet').hidden = false;
+    try { $('run-usd').focus(); } catch (e) {}
+  }
+  function closeRun() { if ($('run-sheet')) $('run-sheet').hidden = true; }
+  function runErr(msg) { const e = $('run-sheet-err'); e.textContent = msg; e.hidden = !msg; }
+  async function saveRun() {
+    const usdV = $('run-usd').value, dateV = $('run-date').value || todayLisbon();
+    const n = Number(String(usdV).replace(',', '.').replace('$', '').replace(/\s/g, ''));
+    if (!(n > 0) || n > 100000) { runErr('Escreve um valor em USD entre 1 e 100 000.'); return; }
+    runErr('');
+    const body = {usd: n, date: dateV, id: 'r' + Date.now().toString(36)};
+    const tok = localStorage.getItem('desk_t'), path = localStorage.getItem('desk_d');
+    const headers = {'content-type': 'application/json'};
+    if (tok) headers['authorization'] = 'Bearer ' + tok;
+    if (path) headers['x-desk-path'] = path;
+    let saved = false;
+    if (path || tok) {
+      try {
+        const r = await fetch(BUDGET_FN, {method: 'POST', headers, body: JSON.stringify(body), referrerPolicy: 'no-referrer'});
+        if (r.status === 200) saved = true;
+        else if (r.status === 401) saved = false;
+        else { const j = await r.json().catch(() => ({})); if (j && j.error) { runErr(String(j.error)); return; } }
+      } catch (e) { /* fall through to Telegram */ }
+    }
+    if (saved) {
+      toast('Orçamento enviado. Confirmamos no Telegram.');
+      closeRun();
+      const t0 = Date.now();
+      const wait = setInterval(async () => {
+        try { const s = await get('state'); renderRun(s); if (s.run && s.run.budgetSet && Number(s.run.savedUsd) === n) clearInterval(wait); } catch (e) {}
+        if (Date.now() - t0 > 25000) clearInterval(wait);
+      }, 3000);
+      return;
+    }
+    const cmd = 'budget ' + n + ' for ' + dateV;
+    try { await copyText(cmd, 'Comando copiado'); } catch (e) {}
+    runErr('Copia e envia isto no Telegram ao bot da mesa:  ' + cmd);
+    try { location.href = 'https://t.me/tetris2kbot'; } catch (e) {}
+  }
+
   // ---------- start ----------
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
   renderRanges();
@@ -672,7 +746,9 @@
     const box = document.createElement('div'); box.className = 'group'; box.id = 'paste-box';
     box.innerHTML = '<div class="row"><input id="paste" placeholder="Paste your desk link" autocomplete="off" autocapitalize="off" spellcheck="false" style="flex:1;min-height:44px;background:none;border:0;color:#fff;font:inherit"></div>';
     $('tab-home').querySelector('.err-slot').after(box);
-    $('paste').addEventListener('change', e => { const mm = e.target.value.match(/#(?:.*&)?d=([A-Za-z0-9]{32,64})/);
+    $('paste').addEventListener('change', e => { const v = e.target.value, mm = v.match(/#(?:.*&)?d=([A-Za-z0-9]{32,64})/);
+      const tm = v.match(/[#&?]t=([A-Za-z0-9_\-]{20,200})/);
+      if (tm) localStorage.setItem('desk_t', tm[1]);
       if (mm) { localStorage.setItem('desk_d', mm[1]); location.reload(); } else toast('That is not a desk link'); });
     loadingLayout(); $('balance').textContent = '—'; $('balance').classList.remove('skel');
     $('today').textContent = ''; $('mult').hidden = true; $('agents-running').textContent = '—'; $('agents-running').classList.remove('skel-i');

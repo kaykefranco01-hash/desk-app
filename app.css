@@ -382,3 +382,12 @@ body.demo .gt-top{margin-top:0}
 .sheet-err{color:var(--red);font-size:14px;font-weight:600;margin:0 0 8px}
 .sheet .btn-fomo{margin:12px 0 0}
 .sheet .btn-secondary{margin:8px 0 0;color:var(--sec)}
+
+/* Brain (6th agent) — proposal + stats on the Agents tab */
+.brain-box{margin:10px 0 4px;padding:12px 12px 8px;border-radius:14px;background:#5e5ce614;border:1px solid #5e5ce633}
+.brain-box .bh{font-weight:700;font-size:14px;color:#5e5ce6;margin:0 0 6px}
+.brain-prop{font-size:14px;line-height:1.45;margin:0 0 8px;color:var(--text)}
+.brain-stat{display:flex;justify-content:space-between;gap:8px;font-size:13px;padding:4px 0;border-top:1px solid #ffffff10}
+.brain-stat .k{color:var(--sec);flex:1;text-align:left}
+.brain-stat .v{font-variant-numeric:tabular-nums;color:var(--text)}
+.brain-empty{color:var(--sec);font-size:14px;margin:8px 0}

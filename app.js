@@ -14,9 +14,9 @@
   const RM = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
   const safe = u => (typeof u === 'string' && /^https:\/\/[^\s"'<>]+$/.test(u)) ? u : null;   // pass-through only, never built here
-  const ORDER = ['scanner', 'auditor', 'analyst', 'executor', 'risk'];
-  const NAMES = {scanner: 'Scanner', auditor: 'Auditor', analyst: 'Analyst', executor: 'Executor', risk: 'Risk'};
-  const COLORS = {scanner: '#0a84ff', auditor: '#bf5af2', analyst: '#30d158', executor: '#ff9f0a', risk: '#ff453a'};   // same 5 colours as the Home rows
+  const ORDER = ['scanner', 'auditor', 'analyst', 'executor', 'risk', 'brain'];
+  const NAMES = {scanner: 'Scanner', auditor: 'Auditor', analyst: 'Analyst', executor: 'Executor', risk: 'Risk', brain: 'Brain'};
+  const COLORS = {scanner: '#0a84ff', auditor: '#bf5af2', analyst: '#30d158', executor: '#ff9f0a', risk: '#ff453a', brain: '#5e5ce6'};   // same colours as the Home rows
 
   // ---------- 1. desk link from the fragment -> localStorage, then wipe the fragment ----------
   (function readFragment() {
@@ -257,13 +257,14 @@
   const tick = () => { $('clock').textContent = new Date().toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit', timeZone: TZ}); };
   tick(); setInterval(tick, 1000);
   // Agent rows (Grok Terminal look). One colour + icon per agent; every value from state.json cards (or demo.json).
-  const AC = {scanner: '#0a84ff', auditor: '#bf5af2', analyst: '#30d158', executor: '#ff9f0a', risk: '#ff453a'};
+  const AC = {scanner: '#0a84ff', auditor: '#bf5af2', analyst: '#30d158', executor: '#ff9f0a', risk: '#ff453a', brain: '#5e5ce6'};
   const ICON = {
     scanner: '<circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6" opacity=".7"/><path d="M12 12L18 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/>',
     auditor: '<path d="M12 2.8l7.5 2.8v5.6c0 4.7-3.2 8.4-7.5 10-4.3-1.6-7.5-5.3-7.5-10V5.6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M8.6 12.2l2.4 2.4 4.6-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
     analyst: '<path d="M2.5 12h3l2.2-5.5 3.6 11 3-8 1.9 2.5h5.3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
     executor: '<rect x="5" y="8" width="14" height="11" rx="3.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 8V4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="3.8" r="1.4" fill="currentColor"/><circle cx="9.3" cy="13.3" r="1.5" fill="currentColor"/><circle cx="14.7" cy="13.3" r="1.5" fill="currentColor"/><path d="M3 12.5v3M21 12.5v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
     risk: '<path d="M12 2.8l7.5 2.8v5.6c0 4.7-3.2 8.4-7.5 10-4.3-1.6-7.5-5.3-7.5-10V5.6z" fill="currentColor" opacity=".22"/><path d="M12 2.8l7.5 2.8v5.6c0 4.7-3.2 8.4-7.5 10-4.3-1.6-7.5-5.3-7.5-10V5.6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 7.5v5.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="16.2" r="1.3" fill="currentColor"/>',
+    brain: '<circle cx="12" cy="12" r="8.6" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="11" r="1.4" fill="currentColor"/><circle cx="15" cy="11" r="1.4" fill="currentColor"/><circle cx="12" cy="15.2" r="1.4" fill="currentColor"/><path d="M9 11h6M9 11l3 4.2M15 11l-3 4.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
   };
   const icon = a => `<span class="ag-ico" style="color:${AC[a]};background:${AC[a]}22"><svg viewBox="0 0 24 24" aria-hidden="true">${ICON[a]}</svg></span>`;
   const n0 = v => v == null || isNaN(v) ? '—' : Number(v).toLocaleString('en-US');
@@ -303,6 +304,12 @@
       const g = c.guarding || 0, stopTxt = c.stopPct != null ? `stop at -${esc(c.stopPct)}%` : esc(((c.pills || [])[0] || {}).text || '');
       line = g ? `guarding ${g} · ${stopTxt}${/trail on/i.test(c.label || '') ? ' · <span class="green">trail on</span>' : ''}` : ((c.lastExit || c.label) && c.lastExitCoin ? `${esc(String(c.lastExit || c.label).toLowerCase())} <b>${esc(c.lastExitCoin)}</b> · ${stopTxt}` : `no position · ${stopTxt}`);
       const dd = Number(c.ddPct || 0); val = `DD ${dd.toFixed(1)}%`; vc = dd > 0 ? 'red' : ''; hot = g > 0;
+    } else if (a === 'brain') {
+      const nProp = c.proposals || 0, lessons = c.lessons || 0;
+      line = esc(c.label || c.headline || 'a aprender com os trades e as recusas');
+      val = nProp ? `${n0(nProp)}<small>propostas</small>` : `${n0(lessons)}<small>lições</small>`;
+      vc = nProp ? 'ac' : '';
+      hot = nProp > 0;
     }
     if (hotAgent) hot = hotAgent === a;
     if (off) hot = false;
@@ -355,6 +362,29 @@
   }
 
   // ---------- AGENTS TAB ----------
+
+  function brainPanel(c, d) {
+    const s = (d && d.summary) || c || {};
+    const props = s.proposals || [];
+    const setups = s.setups || c.setups || [];
+    const refusals = (s.refusals || c.refusals || []).filter(x => x.known > 0);
+    const bits = [];
+    if (props.length) {
+      bits.push(`<div class="brain-box"><div class="bh">Propostas (precisas do teu ok)</div>${
+        props.map(p => `<p class="brain-prop">${esc(p.text)}</p>`).join('')}</div>`);
+    } else {
+      bits.push(`<div class="brain-empty">${esc(s.headline || c.label || 'Ainda a aprender. Só proponho com 20 casos no mesmo grupo.')}</div>`);
+    }
+    if (setups.length) {
+      bits.push(`<div class="brain-box"><div class="bh">Trades por grupo</div>${
+        setups.map(b => `<div class="brain-stat"><span class="k">${esc(b.label || b.bucket)}</span><span class="v num">${b.n} · acerto ${b.winRate == null ? '—' : b.winRate + '%'} · PnL ${b.avgPnlPct == null ? '—' : (b.avgPnlPct >= 0 ? '+' : '') + b.avgPnlPct + '%'}</span></div>`).join('')}</div>`);
+    }
+    if (refusals.length) {
+      bits.push(`<div class="brain-box"><div class="bh">Recusas com preço depois</div>${
+        refusals.slice(0, 8).map(b => `<div class="brain-stat"><span class="k">${esc(b.label || b.bucket)}</span><span class="v num">${b.known} conhecidas · ${b.ran} subiram · ${b.rugged} caíram</span></div>`).join('')}</div>`);
+    }
+    return bits.join('') || `<div class="brain-empty">Ainda a aprender</div>`;
+  }
   async function renderAgents() {
     const s = cache.state || {}, out = [];
     const ds = await Promise.all(ORDER.map(a => tryGet(`agents/${a}/decisions`).catch(() => cache[`agents/${a}/decisions`])));
@@ -366,13 +396,15 @@
         <span class="sw-wrap" data-ro="${locked ? 'Risk is locked while a position is open' : 'Read-only here · send “' + cmd + '” in Telegram'}"><span class="switch ro ${c.paused ? '' : 'on'}" role="switch" aria-checked="${!c.paused}" aria-disabled="true"></span></span></div>
         <div class="cnt num">${c.paused ? 'Paused' : c.running ? 'Running' : 'No heartbeat'} · ${d.todayCount == null ? '—' : d.todayCount} today</div>
         ${locked ? '<div class="ro-note">Pause is locked while a position is open</div>' : viaNote(p, cmd)}
-        ${(d.decisions || []).length ? d.decisions.slice(0, 20).map(x => {
-          const bad = /kill|reject|stop|missed|skipped/.test(x.verdict), good = /pass|cleared|bought|trail/.test(x.verdict);
+        ${a === 'brain' ? brainPanel(c, d) : ((d.decisions || []).length ? d.decisions.slice(0, 20).map(x => {
+          const bad = /kill|reject|stop|missed|skipped|loss|rugged/.test(x.verdict), good = /pass|cleared|bought|trail|win|ran|proposta/.test(x.verdict);
           const u = safe(x.link);
-          return `<div class="dec"><span class="tm">${hm(x.time)}</span>${u ? `<a class="cn" href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(x.coin || short(x.mint))}</a>` : `<span class="cn">${esc(x.coin || short(x.mint))}</span>`}
+          const label = x.coin || (x.mint ? short(x.mint) : (x.verdict === 'proposta' ? 'proposta' : '—'));
+          return `<div class="dec"><span class="tm">${hm(x.time)}</span>${u ? `<a class="cn" href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>` : `<span class="cn">${esc(label)}</span>`}
             <span class="vr ${bad ? 'bad' : good ? 'good' : ''}">${esc(x.verdict)}${x.reason ? ' · ' + esc(x.reason) : ''}</span></div>`; }).join('')
-          : `<div class="dec"><span></span><span class="sec">${a === 'scanner' ? 'Listening for graduations' : a === 'auditor' ? 'No coin taken apart yet' : 'No decisions yet'}</span><span></span></div>`}
-        <button class="link-row" data-go="account" data-anchor="set-${a}">Settings <span class="chev">›</span></button></div>`);
+          : `<div class="dec"><span></span><span class="sec">${a === 'scanner' ? 'Listening for graduations' : a === 'auditor' ? 'No coin taken apart yet' : 'No decisions yet'}</span><span></span></div>`)}
+        ${a === 'brain' ? '<div class="ro-note">O Brain não muda filtros nem tamanhos. Só propõe, e tu decides.</div>'
+          : `<button class="link-row" data-go="account" data-anchor="set-${a}">Settings <span class="chev">›</span></button>`}</div>`);
     });
     $('agents-list').innerHTML = out.join('');
   }
@@ -396,7 +428,7 @@
   $('activity-more').onclick = () => renderActivity(true);
 
   // ---------- ACCOUNT TAB ----------
-  const LBL = {scanner: 'Scanner', auditor: 'Auditor', analyst: 'Analyst', analyst_rules: 'Analyst (rules)', executor: 'Executor', risk: 'Risk', desk: 'Desk'};
+  const LBL = {scanner: 'Scanner', auditor: 'Auditor', analyst: 'Analyst', analyst_rules: 'Analyst (rules)', executor: 'Executor', risk: 'Risk', brain: 'Brain', desk: 'Desk'};
   async function renderAccount() {
     const [acc, st] = await Promise.all([tryGet('account').catch(() => cache.account), tryGet('settings').catch(() => cache.settings)]);
     if (!acc) { $('account-body').innerHTML = skelBlocks(4); return; }

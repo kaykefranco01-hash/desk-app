@@ -230,11 +230,27 @@
     renderRun(s);
     pnlRow(s.balance, s.night_start, s.today_pct, s.multiplier);
     $('open-n').textContent = n0(s.open_positions || 0);
+    renderOpenPos(s.openPositions || []);
     $('updated').textContent = hms(new Date(s.ts));
     const running = ORDER.filter(a => (s.agents || {})[a] && s.agents[a].running).length;
     $('agents-running').textContent = running; $('agents-running').classList.remove('skel-i');
     const hot = demoOn() && DEMO.step ? DEMO.step.agent : null;
     $('ag-rows').innerHTML = ORDER.map(a => agRow(a, (s.cards || {})[a] || {}, s, hot)).join('');
+  }
+  function renderOpenPos(rows) {
+    const el = $('open-pos');
+    if (!el) return;
+    if (!rows.length) { el.hidden = true; el.innerHTML = ''; return; }
+    el.hidden = false;
+    el.innerHTML = rows.map(p => {
+      const u = safe(p.link);
+      const trail = p.trailActive && p.trailLine != null
+        ? ` · trail ${price(p.trailLine)}${p.trailVsEntryPct != null ? ' (' + (p.trailVsEntryPct >= 0 ? '+' : '') + Number(p.trailVsEntryPct).toFixed(1) + '%)' : ''}`
+        : ' · trail off';
+      const since = p.sinceEntryPct != null ? `<span class="num ${p.sinceEntryPct >= 0 ? 'green' : 'red'}">${p.sinceEntryPct >= 0 ? '+' : ''}${Number(p.sinceEntryPct).toFixed(1)}%</span>` : '';
+      const inner = `<span class="t">${esc(p.name || short(p.mint))}</span> ${usd(p.sizeUsd)} · stop ${price(p.stopPrice)}${trail} ${since}`;
+      return u ? `<a class="open-pos-row" href="${esc(u)}" target="_blank" rel="noopener noreferrer">${inner}</a>` : `<div class="open-pos-row">${inner}</div>`;
+    }).join('');
   }
   function dot(c) { return `<span class="dot ${c.paused ? 'paused' : c.running ? 'on' : ''}"></span>`; }
   // live clock (Lisbon) in the status row
@@ -400,6 +416,10 @@
       <div class="ro-note">${esc((acc.webPush && acc.webPush.note) || 'plan B: no web push, Telegram only')}</div>`;
     h += pilotCards(acc.pilot);
     if (st && st.groups) {
+      const w = runOf(cache.state || {}).wallet || {};
+      if (w.pilotSizeNote || w.livePilotSizeUsd != null) {
+        h += `<div class="ghead">Tamanho do piloto</div><div class="group"><div class="setrow small sec">${esc(pilotSizeLine(w) || w.pilotSizeNote || '')} Os caps (max_usd_per_trade, max_trade_pct, sol_reserve) não mudam. Com 0 SOL o DRY continua a usar o equity PAPER.</div></div>`;
+      }
       h += `<div class="ghead">Settings</div>` + viaNote(st, st.command);
       const tc = st.ticketCheck;
       if (tc) h += `<div class="group"><div class="row"><span class="k">Ticket check</span><span class="v num ${tc.status === 'ok' ? 'green' : tc.status === 'bump' ? '' : 'red'}">${tc.status === 'ok' ? 'OK' : esc(tc.status)}</span></div>
@@ -448,7 +468,7 @@
         ${p.open ? '' : `<div class="ln"><span class="sec">Closed · ${esc(p.exitReason)}</span><span class="num ${(p.pnlUsd || 0) >= 0 ? 'green' : 'red'}">${usd(p.pnlUsd)}</span></div>`}</div>`;
       if (p.open && x) h += `<div class="pos"><div class="t">Exit</div>
         <div class="ln"><span class="sec">Stop line · -${esc(x.stopPct)}%</span><span class="num red">${price(x.stopPrice)}</span></div>
-        <div class="ln"><span class="sec">Trail line · ${esc(x.trailPct)}%</span><span class="num ${x.trailActive ? 'green' : 'ter'}">${x.trailActive ? price(x.trailLine) : 'from ' + price(x.trailStartPrice)}</span></div>
+        <div class="ln"><span class="sec">Trail line · ${esc(x.trailPct)}%${x.trailActive && x.trailVsEntryPct != null ? ' · ' + (x.trailVsEntryPct >= 0 ? '+' : '') + Number(x.trailVsEntryPct).toFixed(1) + '% vs entry' : ''}</span><span class="num ${x.trailActive ? 'green' : 'ter'}">${x.trailActive ? price(x.trailLine) : 'from ' + price(x.trailStartPrice)}</span></div>
         <div class="ln"><span class="sec">Time left to timeout</span><span class="num">${left(x.timeLeftS)}</span></div></div>`;
     }
     if (u) h += `<div class="sticky-cta"><a class="btn-fomo ${p && p.open ? 'sell' : ''}" href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(c.button || (p && p.open ? 'Sell on FOMO' : 'Buy on FOMO'))}</a></div>`;
@@ -697,6 +717,15 @@
     const when = w.ts ? ' · atualizado ' + hm(w.ts) : '';
     return 'Carteira do bot: ' + sol + ' SOL ≈ ' + usd(walletUsd(w)) + when;
   }
+  function pilotSizeLine(w) {
+    if (!w) return '';
+    if (w.pilotSizeNote) return w.pilotSizeNote;
+    if (w.livePilotSizeUsd == null && w.dryPilotSizeUsd == null) return '';
+    const live = w.livePilotSizeUsd == null ? '—' : usd(w.livePilotSizeUsd);
+    const dry = w.dryPilotSizeUsd == null ? '—' : usd(w.dryPilotSizeUsd);
+    const desk = w.deskTicketUsd == null ? '' : ' · ticket da mesa ' + usd(w.deskTicketUsd);
+    return 'Tamanho real do piloto: LIVE ' + live + ' · DRY ' + dry + desk;
+  }
   function walletBal(w) {
     if (!w || (w.usd == null && w.sol == null)) return '$0.00 · — SOL';
     const sol = w.sol == null ? '—' : Number(w.sol).toLocaleString('en-US', {maximumFractionDigits: 4, minimumFractionDigits: 0});
@@ -706,6 +735,11 @@
     const r = runOf(s), mode = (s.mode === 'LIVE' ? 'LIVE' : s.mode === 'DEMO' ? 'DEMO' : 'PAPER');
     if ($('run-budget')) $('run-budget').textContent = walletBal(r.wallet);
     if ($('run-wallet')) $('run-wallet').textContent = walletLine(r.wallet);
+    if ($('run-pilot-size')) {
+      const line = pilotSizeLine(r.wallet);
+      $('run-pilot-size').textContent = line;
+      $('run-pilot-size').hidden = !line;
+    }
     const addr = (r.wallet && r.wallet.address) || PUBLIC_WALLET;
     if ($('run-addr')) $('run-addr').textContent = addr;
     const hint = $('mode-hint');

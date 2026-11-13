@@ -355,6 +355,9 @@ body.demo .gt-top{margin-top:0}
 .run-bal{font-family:var(--display);font-weight:700;font-size:22px;letter-spacing:-.3px;line-height:1.2;font-variant-numeric:tabular-nums}
 .run-line{font-size:14px;font-weight:600;color:var(--sec);line-height:1.35}
 .run-line b{color:var(--text);font-weight:700}
+.open-pos{margin:8px 16px 0;padding:8px 0;border-top:1px solid var(--line, #2c2c2e)}
+.open-pos-row{display:block;font-size:13px;color:var(--sec);padding:4px 0;text-decoration:none;line-height:1.35}
+.open-pos-row .t{color:var(--text);font-weight:600;margin-right:6px}
 .run-note{font-size:13px;color:var(--sec);margin:0;line-height:1.4}
 .panel-addr{margin:0}
 #mode-hint{color:var(--yellow)}

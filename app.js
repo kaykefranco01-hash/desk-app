@@ -674,16 +674,25 @@
   const APP_FN = 'https://eaggelbvxpglfxsmcldr.supabase.co/functions/v1/desk-budget';
   const PUBLIC_WALLET = '8Sdwu3thcsB2AD2D5KXL3y4Yxm8npZ43H9hm52gNC9ht';
   function runOf(s) { return (s && s.run) || {}; }
+  function walletUsd(w) {
+    // Deposited SOL only: 0 SOL is $0.00. Never show DRY/paper equity as the wallet USD.
+    if (!w) return null;
+    const sol = (w.sol == null || isNaN(Number(w.sol))) ? null : Number(w.sol);
+    if (sol === 0) return 0;
+    const px = (w.solPrice == null || isNaN(Number(w.solPrice))) ? null : Number(w.solPrice);
+    if (sol != null && px != null && px > 0) return sol * px;
+    return (w.usd == null || isNaN(Number(w.usd))) ? null : Number(w.usd);
+  }
   function walletLine(w) {
     if (!w || w.sol == null || isNaN(w.sol)) return 'Carteira do bot: —';
     const sol = Number(w.sol).toLocaleString('en-US', {maximumFractionDigits: 4, minimumFractionDigits: 0});
     const when = w.ts ? ' · atualizado ' + hm(w.ts) : '';
-    return 'Carteira do bot: ' + sol + ' SOL ≈ ' + usd(w.usd) + when;
+    return 'Carteira do bot: ' + sol + ' SOL ≈ ' + usd(walletUsd(w)) + when;
   }
   function walletBal(w) {
     if (!w || (w.usd == null && w.sol == null)) return '$0.00 · — SOL';
     const sol = w.sol == null ? '—' : Number(w.sol).toLocaleString('en-US', {maximumFractionDigits: 4, minimumFractionDigits: 0});
-    return usd(w.usd) + ' · ' + sol + ' SOL';
+    return usd(walletUsd(w)) + ' · ' + sol + ' SOL';
   }
   function renderRun(s) {
     const r = runOf(s), mode = (s.mode === 'LIVE' ? 'LIVE' : s.mode === 'DEMO' ? 'DEMO' : 'PAPER');

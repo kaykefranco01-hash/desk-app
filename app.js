@@ -133,7 +133,6 @@
     const r = ev.target.closest('[data-range]'); if (r) { range = r.dataset.range; renderRanges(); loadChart(); return; }
     const inv = ev.target.closest('#invite'); if (inv) { invite(inv.dataset.url); return; }
     const cp = ev.target.closest('[data-copy]'); if (cp) { copyText(cp.dataset.copy, 'Command copied'); return; }
-    const os = ev.target.closest('[data-pos]'); if (os) { pilotOS = os.dataset.pos; renderAccount(); return; }
     const ro = ev.target.closest('[data-ro]'); if (ro) { toast(ro.dataset.ro); }
   });
   $('btn-search').onclick = () => push('scr-search');
@@ -161,19 +160,14 @@
     }
     toast(msg);
   }
-  let pilotOS = 'windows';
   function pilotCards(pl) {
-    // No secrets here: the desk publishes only status, desk.yaml text/diff and the restart command.
+    // No secrets here: the desk publishes only status, desk.yaml text/diff and the restart note.
     if (!pl) return '';
     const chips = (pl.chips || []).map(c => `<span class="chip ${c.id === 'heartbeat' ? (c.ok ? 'ok' : 'bad') : ''}"><span class="ck">${esc(c.label)}</span> ${esc(c.value)}</span>`).join('');
     const y = pl.yaml || {}, diff = y.diff || [];
     const dl = diff.length ? diff.map(d => `<div class="dl ${d.sign === '+' ? 'add' : 'del'}"><span class="sg">${d.sign === '+' ? '+' : '−'}</span>${esc(d.text)}</div>`).join('')
       : `<div class="dl none">${y.running ? 'No changes. Running desk.yaml matches the desk.' : 'No desk.yaml reported yet (pilot not seen).'}</div>`;
-    const cmds = (pl.restart || {})[pilotOS] || {};
-    const osBtn = k => `<button class="${pilotOS === k ? 'on' : ''}" data-pos="${k}">${{windows: 'Windows', mac: 'macOS', linux: 'Linux'}[k]}</button>`;
-    const cmdBox = (label, c) => c ? `<div class="cmdlbl small sec">${esc(label)}</div><div class="cmd"><code>${esc(c)}</code></div>
-      <button class="copybtn" data-copy="${esc(c)}">Copy command</button>` : '';
-    return `<div class="ghead">Pilot on your PC</div>
+    return `<div class="ghead">Pilot on the 24h server</div>
       <div class="chips">${chips}</div>
       <div class="group">
         <div class="row"><span class="k">Kill switch</span><span class="v ${pl.halt ? 'red' : 'green'}">${pl.halt ? 'Stopped' : 'Running'}</span></div>
@@ -183,13 +177,10 @@
       ${viaNote(pl.control, 'pilot stop | pilot start')}
       <div class="ghead">desk.yaml ${y.diffKind === 'pending' ? '· pending change' : y.diffKind === 'last change' ? '· last change' : ''}</div>
       <div class="group pad"><div class="diff">${dl}</div>
-        ${y.diffKind === 'pending' ? `<div class="setrow small sec">Applies when you ${esc(y.appliesOn || 'restart pilot.py on your PC')}.</div>` : ''}</div>
+        ${y.diffKind === 'pending' ? `<div class="setrow small sec">Applies when you ${esc(y.appliesOn || 'restart the pilot on the 24h server')}.</div>` : ''}</div>
       ${viaNote(y.setVia, 'pilot set budget 150')}
-      <div class="ghead">Restart pilot.py on your PC</div>
-      <div class="group pad"><div class="seg2">${osBtn('windows')}${osBtn('mac')}${osBtn('linux')}</div>
-        ${cmdBox(pilotOS === 'windows' ? 'PowerShell · stop, then start again' : 'Terminal · stop, then start again', cmds.restart)}
-        ${cmdBox('With the race block (--race)', cmds.restartRace)}
-        ${cmdBox('Stop only', cmds.stop)}</div>`;
+      <div class="ghead">Restart</div>
+      <div class="group pad"><div class="setrow small sec">O piloto corre no servidor 24h e religa sozinho. Não ligues o piloto antigo no PC.</div></div>`;
   }
   const viaNote = (w, extra) => w && w.readOnly
     ? `<div class="ro-note">${w.writeVia === 'none' ? esc(w.note || 'Not available in plan B') : 'Read-only here · use Telegram' + (w.command || extra ? ': <b>' + esc(extra || w.command) + '</b>' : '')}</div>` : '';
@@ -681,7 +672,7 @@
 
   // ---------- Wallet deposit on the panel + PAPER/LIVE toggle (the pill itself). ----------
   const APP_FN = 'https://eaggelbvxpglfxsmcldr.supabase.co/functions/v1/desk-budget';
-  const PUBLIC_WALLET = '6JWGDxCUG7rzNTdH7caaG56aNFbCqCXFAYGijCWvZbSQ';
+  const PUBLIC_WALLET = '8Sdwu3thcsB2AD2D5KXL3y4Yxm8npZ43H9hm52gNC9ht';
   function runOf(s) { return (s && s.run) || {}; }
   function walletLine(w) {
     if (!w || w.sol == null || isNaN(w.sol)) return 'Carteira do bot: —';

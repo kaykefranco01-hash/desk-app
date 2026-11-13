@@ -160,6 +160,13 @@
     }
     toast(msg);
   }
+  function orderStatus(s) {
+    if (s === 'dry_filled') return 'dry-filled (pilot answered, no money moved)';
+    if (s === 'expired') return 'expired (no reply)';
+    if (s === 'filled') return 'filled';
+    if (s === 'open') return 'open';
+    return s || '—';
+  }
   function pilotCards(pl) {
     // No secrets here: the desk publishes only status, desk.yaml text/diff and the restart note.
     if (!pl) return '';
@@ -173,7 +180,8 @@
         <div class="row"><span class="k">Kill switch</span><span class="v ${pl.halt ? 'red' : 'green'}">${pl.halt ? 'Stopped' : 'Running'}</span></div>
         <div class="row"><span class="k">Mode</span><span class="v">${esc(pl.mode || '—')}${pl.race ? ' · race' : ''}</span></div>
         ${pl.raceBlock ? `<div class="setrow small sec">${esc(pl.raceBlock)}</div>` : ''}
-        ${pl.lastError ? `<div class="setrow small red">${esc(pl.lastError)}</div>` : ''}</div>
+        ${pl.lastError ? `<div class="setrow small red">${esc(pl.lastError)}</div>` : ''}
+        ${pl.lastOrder && pl.lastOrder.id ? `<div class="row"><span class="k">Last order</span><span class="v">${esc(pl.lastOrder.id)} · ${esc(orderStatus(pl.lastOrder.status))}</span></div>` : ''}</div>
       ${viaNote(pl.control, 'pilot stop | pilot start')}
       <div class="ghead">desk.yaml ${y.diffKind === 'pending' ? '· pending change' : y.diffKind === 'last change' ? '· last change' : ''}</div>
       <div class="group pad"><div class="diff">${dl}</div>

@@ -40,7 +40,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-VERSION = "1.1.2"
+VERSION = "1.1.3"
 SOL_MINT = "So11111111111111111111111111111111111111112"
 USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
 LAMPORTS = 1_000_000_000
@@ -654,13 +654,34 @@ class Pilot:
         if raw_now == 0:
             self.state["positions"].pop(mint)
 
+    def dry_realized_usd(self) -> float:
+        """Cumulative realized PnL of closed DRY trades. Persisted, or rebuilt from fills once."""
+        v = self.state.get("dry_realized_usd")
+        if v is not None:
+            return float(v)
+        book: dict = {}
+        realized = 0.0
+        for f in self.state.get("fills") or []:
+            if not f.get("dry") or not f.get("ok"):
+                continue
+            mint = f.get("mint")
+            if f.get("kind") == "buy":
+                book[mint] = float(f.get("usdIn") or 0)
+            elif f.get("kind") == "sell" and mint in book:
+                realized += float(f.get("usdOut") or 0) - book.pop(mint)
+        self.state["dry_realized_usd"] = round(realized, 4)
+        return float(self.state["dry_realized_usd"])
+
     def equity(self, lamports: int, sol_px: float, live: bool) -> float:
         pos = self.positions(live)
-        val = sum(p.get("mark_usd", p["cost_usd"]) for p in pos.values())
-        sol_usd = lamports / LAMPORTS * sol_px
-        if not live and lamports == 0:
-            sol_usd = float(self.cfg["dry_equity_usd"])
-        return round(sol_usd + val, 2)
+        marks = sum(p.get("mark_usd", p["cost_usd"]) for p in pos.values())
+        if live or lamports:
+            return round(lamports / LAMPORTS * sol_px + marks, 2)
+        # Empty-wallet DRY: cash is the $100 starting book minus open cost, plus realized PnL.
+        # Equity is cash + marks, so a DRY buy is not counted twice.
+        deployed = sum(float(p["cost_usd"]) for p in pos.values())
+        cash = float(self.cfg["dry_equity_usd"]) - deployed + self.dry_realized_usd()
+        return round(cash + marks, 2)
 
     def roll_day(self, equity_usd: float) -> dict:
         key = datetime.now().strftime("%Y-%m-%d")             # the PC's own calendar day
@@ -819,6 +840,8 @@ class Pilot:
         tx = self.build_swap(q)
         if not live:
             sim = self.simulate(tx) if self.state.get("expected_lamports") else "wallet empty: simulation skipped"
+            cost = float(p["cost_usd"])
+            self.state["dry_realized_usd"] = round(self.dry_realized_usd() + (got - cost), 4)
             pos.pop(mint)
             tokens = raw / 10 ** p["decimals"]
             return self.fill(order, "sell", mint, True, True, usd_out=round(got, 4), tokens=tokens,

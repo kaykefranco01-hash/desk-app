@@ -10,12 +10,13 @@
   document.addEventListener('dblclick', ev => ev.preventDefault(), {capture: true});
   const BASE = 'https://eaggelbvxpglfxsmcldr.supabase.co/storage/v1/object/public/desk';
   const STATE_S = 15, EVENTS_S = 5, SCREEN_S = 15;
+  const HOME_POLL_S = 5;   // live home: state.json is rewritten every ~15 s by the desk; reading it every 5 s keeps the lag short
   const $ = id => document.getElementById(id);
   const RM = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
   const safe = u => (typeof u === 'string' && /^https:\/\/[^\s"'<>]+$/.test(u)) ? u : null;   // pass-through only, never built here
   const ORDER = ['scanner', 'auditor', 'analyst', 'executor', 'risk', 'brain'];
-  const NAMES = {scanner: 'Scanner', auditor: 'Auditor', analyst: 'Analyst', executor: 'Executor', risk: 'Risk', brain: 'Brain'};
+  const NAMES = {scanner: 'Scanner', auditor: 'Auditor', analyst: 'Analyst', executor: 'Executor', risk: 'Risk', brain: 'Brain', discover: 'Discover'};
   const COLORS = {scanner: '#0a84ff', auditor: '#bf5af2', analyst: '#30d158', executor: '#ff9f0a', risk: '#ff453a', brain: '#5e5ce6'};   // same colours as the Home rows
 
   // ---------- 1. desk link from the fragment -> localStorage, then wipe the fragment ----------
@@ -170,7 +171,7 @@
   function pilotCards(pl) {
     // No secrets here: the desk publishes only status, desk.yaml text/diff and the restart note.
     if (!pl) return '';
-    const chips = (pl.chips || []).map(c => `<span class="chip ${c.id === 'heartbeat' ? (c.ok ? 'ok' : 'bad') : ''}"><span class="ck">${esc(c.label)}</span> ${esc(c.value)}</span>`).join('');
+    const chips = (pl.chips || []).map(c => `<span class="chip ${c.ok === false ? 'bad' : c.ok ? 'ok' : ''}"><span class="ck">${esc(c.label)}</span> ${esc(c.value)}</span>`).join('');
     const y = pl.yaml || {}, diff = y.diff || [];
     const dl = diff.length ? diff.map(d => `<div class="dl ${d.sign === '+' ? 'add' : 'del'}"><span class="sg">${d.sign === '+' ? '+' : '−'}</span>${esc(d.text)}</div>`).join('')
       : `<div class="dl none">${y.running ? 'No changes. Running desk.yaml matches the desk.' : 'No desk.yaml reported yet (pilot not seen).'}</div>`;
@@ -180,7 +181,8 @@
         <div class="row"><span class="k">Kill switch</span><span class="v ${pl.halt ? 'red' : 'green'}">${pl.halt ? 'Stopped' : 'Running'}</span></div>
         <div class="row"><span class="k">Mode</span><span class="v">${esc(pl.mode || '—')}${pl.race ? ' · race' : ''}</span></div>
         ${pl.raceBlock ? `<div class="setrow small sec">${esc(pl.raceBlock)}</div>` : ''}
-        ${pl.lastError ? `<div class="setrow small red">${esc(pl.lastError)}</div>` : ''}
+        ${pl.errorBrake && pl.errorBrake.active ? `<div class="setrow small red">Compras pausadas por erro · ${esc(pl.errorBrake.ticker || '?')} · -$${esc(Number(pl.errorBrake.lossUsd || 0).toFixed(2))}. Vendas e stops continuam. Para voltar a comprar: <b>/retomar</b> no Telegram.</div>` : ''}
+        ${pl.lastError ? `<div class="setrow small red">${esc(pl.lastError)}${pl.errorPersistent ? ' · há ' + Math.max(1, Math.round((pl.errorSinceS || 0) / 60)) + ' min' : ''}</div>` : ''}
         ${pl.lastOrder && pl.lastOrder.id ? `<div class="row"><span class="k">Last order</span><span class="v">${esc(pl.lastOrder.id)} · ${esc(orderStatus(pl.lastOrder.status))}</span></div>` : ''}</div>
       ${viaNote(pl.control, 'pilot stop | pilot start')}
       <div class="ghead">desk.yaml ${y.diffKind === 'pending' ? '· pending change' : y.diffKind === 'last change' ? '· last change' : ''}</div>
@@ -198,9 +200,12 @@
   function renderRanges() { $('ranges').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.r === range)); }
   async function loadChart() {
     try { const c = await tryGet('chart/' + range); if (c) drawChart(c); } catch (e) { if (cache['chart/' + range]) drawChart(cache['chart/' + range]); }
+    $('ranges').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.r === range));
   }
-  function drawChart(c) {
-    window.DeskChart.line($('chart'), c);
+  let drawnRange = null;
+  function drawChart(c, fresh) {
+    const reveal = fresh || drawnRange !== range; drawnRange = range;
+    window.DeskChart.line($('chart'), c, {reveal, head: $('chart-head')});
     if (range === 'LIVE') profitCheck('chart', (c.marks || []).filter(m => m.kind !== 'bought' && Number(m.usd != null ? m.usd : /^\+/.test(m.label || '') ? 1 : -1) > 0).map(m => 'a:' + (m.mint || '') + ':m' + Math.round(m.ts)));
     $('chart-empty').textContent = c.empty || 'Waiting for the first trade';
     $('chart-empty').hidden = !c.empty && (c.points || []).length > 1;
@@ -232,10 +237,124 @@
     $('open-n').textContent = n0(s.open_positions || 0);
     renderOpenPos(s.openPositions || []);
     $('updated').textContent = hms(new Date(s.ts));
+    const L = !demoOn() && s.live && s.live.bots ? s.live : null;
+    const $b = $('balance'); $b.classList.toggle('red', (s.pnl_usd != null ? s.pnl_usd : (s.balance || 0) - (s.night_start || 0)) < 0);
+    $('pnl-since').textContent = s.nightStartAt ? 'desde as ' + hm(s.nightStartAt) : '';
+    if (L) { renderLive(s, L); return; }
+    lastTradeLine(null, s);
     const running = ORDER.filter(a => (s.agents || {})[a] && s.agents[a].running).length;
     $('agents-running').textContent = running; $('agents-running').classList.remove('skel-i');
     const hot = demoOn() && DEMO.step ? DEMO.step.agent : null;
+    liveRows = null;
     $('ag-rows').innerHTML = ORDER.map(a => agRow(a, (s.cards || {})[a] || {}, s, hot)).join('');
+  }
+
+  // ---------- LIVE HOME (state.live): bot rows + activity feed, all from desk.db rows on the server ----------
+  const HOT_S = 15;            // a bot acted since the previous snapshot (the desk writes one every ~15 s)
+  const BADGE = {scanner: 'A ler', auditor: 'A auditar', analyst: 'A pontuar', executor: 'A comprar', risk: 'A vigiar', brain: 'A aprender', discover: 'A procurar'};
+  const UNIT = {scanner: 'hoje', auditor: 'hoje', executor: 'trades', brain: 'lições', discover: 'traders'};
+  let liveRows = null, liveEpoch = 0;
+  const whenTxt = iso => {
+    if (!iso) return '';
+    const d = new Date(iso), day = x => x.toLocaleDateString('en-GB', {timeZone: TZ});
+    const today = new Date(), y = new Date(Date.now() - 86400000);
+    return day(d) === day(today) ? hm(iso) : day(d) === day(y) ? 'ontem ' + hm(iso) : day(d).slice(0, 5) + ' ' + hm(iso);
+  };
+  function lastTradeLine(t, s) {
+    const el = $('last-trade');
+    if (!t) { el.hidden = true; return; }
+    const up = (t.usd || 0) >= 0, why = {stop: 'stop', trail: 'trail', timeout: 'tempo', pulled: 'liquidez saiu'}[t.reason] || t.reason || 'venda';
+    const txt = `Último trade · ${esc(t.coin)} ${esc(why)} <b class="${up ? 'green' : 'red'}">${up ? '+' : '-'}${usd(Math.abs(t.usd || 0)).replace('-', '')}${t.pct != null ? ' (' + (t.pct >= 0 ? '+' : '') + Number(t.pct).toFixed(1) + '%)' : ''}</b> · ${esc(whenTxt(t.iso))}${t.mode && t.mode !== 'LIVE' ? ' · ' + esc(t.mode) : ''}`;
+    if (el.dataset.k !== txt) { el.dataset.k = txt; el.innerHTML = `<span class="lt-in">${txt}</span>`; }
+    el.hidden = false;
+  }
+  function metricHtml(a, b) {
+    const v = b.metric;
+    if (a === 'analyst') return v == null ? '<span class="ter">—</span>' : `score ${n0(v)}`;
+    if (a === 'risk') return `DD ${Number(v || 0).toFixed(1)}%`;
+    return `${v == null ? '—' : n0(v)}<small>${UNIT[a] || ''}</small>`;
+  }
+  function renderLive(s, L) {
+    liveEpoch = L.epoch || (Date.now() / 1000);
+    lastTradeLine(L.lastTrade, s);
+    const order = (L.order || ORDER).filter(a => L.bots[a]);
+    $('agents-running').textContent = `${L.running}/${order.length}`; $('agents-running').classList.remove('skel-i');
+    const box = $('ag-rows');
+    if (!liveRows || liveRows.join() !== order.join()) {
+      liveRows = order.slice();
+      box.innerHTML = order.map(a => `<button class="ag-row live" style="--ac:${AC[a]}" data-a="${a}" data-go="agents" data-anchor="ag-${a}">
+        <span class="ag-ico-w">${icon(a)}<i class="ag-spin"></i></span>
+        <span class="ag-mid"><span class="ag-nm"><i class="hb"></i>${esc(NAMES[a])}<span class="ag-badge"></span><span class="ag-off ter small"></span></span>
+        <span class="ag-ln"><span class="ag-tx"></span></span></span>
+        <span class="ag-val num"></span><i class="ag-load"></i></button>`).join('');
+    }
+    for (const a of order) {
+      const b = L.bots[a], row = box.querySelector(`[data-a="${a}"]`); if (!row) continue;
+      const age = b.lastTs ? liveEpoch - b.lastTs : null;
+      const on = b.running && !b.paused;
+      const hot = on && ((age != null && age >= -2 && age < HOT_S) || (a === 'risk' && b.guarding > 0));
+      row.classList.toggle('hot', hot); row.classList.toggle('on', on); row.classList.toggle('off', !on);
+      row.querySelector('.hb').className = 'hb ' + (b.paused ? 'paused' : b.running ? 'on' : '');
+      row.querySelector('.ag-badge').textContent = hot ? BADGE[a] : '';
+      row.querySelector('.ag-off').textContent = b.paused ? '· pausado' : b.running ? '' : '· parado (sem sinal)';
+      const tx = `${b.coin ? `<b>${esc(b.coin)}</b> ` : ''}<span class="${b.tone === 'red' ? 'red' : b.tone === 'green' ? 'green' : b.tone === 'blue' ? 'ac' : ''}">${esc(b.text || '')}</span>`;
+      const t = row.querySelector('.ag-tx'); if (t.dataset.k !== tx) { t.dataset.k = tx; t.innerHTML = tx; flash(t); }
+      const mh = metricHtml(a, b), m = row.querySelector('.ag-val');
+      if (m.dataset.k !== mh) { const first = !m.dataset.k; m.dataset.k = mh; m.innerHTML = mh; if (!first) flash(m); }
+      m.className = 'ag-val num ' + (a === 'risk' && Number(b.metric || 0) > 0 ? 'red' : a === 'analyst' && b.tone ? b.tone : '');
+    }
+    renderFeed(L.feed || []);
+  }
+  function flash(el) { if (RM()) return; el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
+
+  // Activity feed: new rows slide in at the top, one after another in time order. Each shows its real time.
+  const FEED_N = 8, ACTOR_C = {scanner: '#0a84ff', auditor: '#bf5af2', analyst: '#30d158', executor: '#ff9f0a', risk: '#ff453a', brain: '#5e5ce6', discover: '#64d2ff'};
+  let feedShown = null, feedQ = [], feedT = 0;
+  const hms2 = e => new Date(e.iso || e.ts * 1000).toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: TZ});
+  function feedRow(e, enter) {
+    const trade = ['bought', 'sold', 'stopped', 'partial'].includes(e.kind);
+    const attr = trade ? `data-coin="${esc(e.mint)}"` : e.actor === 'auditor' ? `data-audit="${esc(e.mint)}"` : '';
+    const tone = e.tone === 'red' ? 'red' : e.tone === 'green' ? 'green' : e.tone === 'blue' ? 'blue' : 'grey';
+    const val = e.usd != null && trade ? `<span class="fd-v num ${e.kind === 'bought' ? '' : e.usd >= 0 ? 'green' : 'red'}">${e.kind === 'bought' ? usd(e.usd) : (e.usd >= 0 ? '+' : '-') + usd(Math.abs(e.usd)).replace('-', '')}</span>` : '';
+    const tag = attr ? 'button' : 'div';
+    return `<${tag} class="fd ${tone}${enter ? ' enter' : ''}" data-id="${esc(e.id)}" ${attr} style="--ac:${ACTOR_C[e.actor] || '#888'}">
+      <span class="fd-tm num">${hms2(e)}</span><span class="fd-ic">${icon(e.actor)}</span>
+      <span class="fd-mid"><span class="fd-t"><b>${esc(e.coin || '')}</b> <span class="fd-r">${esc(e.text || '')}</span></span><span class="fd-s">${esc(NAMES[e.actor] || e.actor)}${e.kind === 'kill' ? ' · cortada' : ''}</span></span>${val}</${tag}>`;
+  }
+  function renderFeed(feed) {
+    const box = $('home-activity');
+    if (!feed.length) { box.innerHTML = '<div class="empty-row">Ainda sem atividade</div>'; feedShown = new Set(); return; }
+    profitCheck('feed', feed.filter(e => (e.kind === 'sold' || e.kind === 'partial') && (e.usd || 0) > 0).map(e => e.id));
+    if (!feedShown) {                       // first look: show the newest rows, no animation
+      feedShown = new Set(feed.map(e => e.id));
+      box.innerHTML = feed.slice(0, FEED_N).map(e => feedRow(e, false)).join('');
+      return;
+    }
+    const fresh = feed.filter(e => !feedShown.has(e.id)).sort((a, b) => a.ts - b.ts);
+    fresh.forEach(e => feedShown.add(e.id));
+    if (!fresh.length) return;
+    feedQ.push(...fresh);
+    if (!feedT) pumpFeed();
+  }
+  function pumpFeed() {
+    const e = feedQ.shift(); if (!e) { feedT = 0; return; }
+    const box = $('home-activity');
+    if (box.querySelector('.empty-row')) box.innerHTML = '';
+    if (e.actor === 'auditor') box.querySelectorAll('.fd').forEach(r => { if (r.dataset.audit === e.mint && !r.dataset.coin) r.remove(); });
+    box.insertAdjacentHTML('afterbegin', feedRow(e, !RM()));
+    while (box.children.length > FEED_N) box.lastElementChild.remove();
+    feedT = setTimeout(pumpFeed, RM() ? 0 : Math.max(250, Math.min(900, 4000 / (feedQ.length + 1))));
+  }
+
+  // Pilot problems on Home too (same data as the Account tab, account.json): the brake line and a persistent error.
+  let alertAt = 0;
+  async function homeAlert(force) {
+    if (!force && Date.now() - alertAt < 30000) return; alertAt = Date.now();
+    const acc = await tryGet('account').catch(() => cache.account);
+    const pl = acc && acc.pilot, el = $('home-alert'), bits = [];
+    if (pl && pl.errorBrake && pl.errorBrake.active) bits.push(`<div class="ha red">Compras pausadas por erro · ${esc(pl.errorBrake.ticker || '?')} · -$${esc(Number(pl.errorBrake.lossUsd || 0).toFixed(2))}. Vendas e stops continuam. Para voltar a comprar: <b>/retomar</b> no Telegram.</div>`);
+    if (pl && pl.lastError && pl.errorPersistent) bits.push(`<div class="ha orange" data-go="account">Piloto com erro há ${Math.max(1, Math.round((pl.errorSinceS || 0) / 60))} min · ${esc(pl.lastError)}</div>`);
+    el.innerHTML = bits.join(''); el.hidden = !bits.length;
   }
   function renderOpenPos(rows) {
     const el = $('open-pos');
@@ -248,7 +367,8 @@
         ? ` · trail ${price(p.trailLine)}${p.trailVsEntryPct != null ? ' (' + (p.trailVsEntryPct >= 0 ? '+' : '') + Number(p.trailVsEntryPct).toFixed(1) + '%)' : ''}`
         : ' · trail off';
       const since = p.sinceEntryPct != null ? `<span class="num ${p.sinceEntryPct >= 0 ? 'green' : 'red'}">${p.sinceEntryPct >= 0 ? '+' : ''}${Number(p.sinceEntryPct).toFixed(1)}%</span>` : '';
-      const inner = `<span class="t">${esc(p.name || short(p.mint))}</span> ${usd(p.sizeUsd)} · stop ${price(p.stopPrice)}${trail} ${since}`;
+      const tier = p.sizeTier ? ` · ${esc(p.sizeTier)}` : '';
+      const inner = `<span class="t">${esc(p.name || short(p.mint))}</span> ${usd(p.sizeUsd)}${tier} · stop ${price(p.stopPrice)}${trail} ${since}`;
       return u ? `<a class="open-pos-row" href="${esc(u)}" target="_blank" rel="noopener noreferrer">${inner}</a>` : `<div class="open-pos-row">${inner}</div>`;
     }).join('');
   }
@@ -257,7 +377,7 @@
   const tick = () => { $('clock').textContent = new Date().toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit', timeZone: TZ}); };
   tick(); setInterval(tick, 1000);
   // Agent rows (Grok Terminal look). One colour + icon per agent; every value from state.json cards (or demo.json).
-  const AC = {scanner: '#0a84ff', auditor: '#bf5af2', analyst: '#30d158', executor: '#ff9f0a', risk: '#ff453a', brain: '#5e5ce6'};
+  const AC = {scanner: '#0a84ff', auditor: '#bf5af2', analyst: '#30d158', executor: '#ff9f0a', risk: '#ff453a', brain: '#5e5ce6', discover: '#64d2ff'};
   const ICON = {
     scanner: '<circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6" opacity=".7"/><path d="M12 12L18 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/>',
     auditor: '<path d="M12 2.8l7.5 2.8v5.6c0 4.7-3.2 8.4-7.5 10-4.3-1.6-7.5-5.3-7.5-10V5.6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M8.6 12.2l2.4 2.4 4.6-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -265,6 +385,7 @@
     executor: '<rect x="5" y="8" width="14" height="11" rx="3.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 8V4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="3.8" r="1.4" fill="currentColor"/><circle cx="9.3" cy="13.3" r="1.5" fill="currentColor"/><circle cx="14.7" cy="13.3" r="1.5" fill="currentColor"/><path d="M3 12.5v3M21 12.5v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
     risk: '<path d="M12 2.8l7.5 2.8v5.6c0 4.7-3.2 8.4-7.5 10-4.3-1.6-7.5-5.3-7.5-10V5.6z" fill="currentColor" opacity=".22"/><path d="M12 2.8l7.5 2.8v5.6c0 4.7-3.2 8.4-7.5 10-4.3-1.6-7.5-5.3-7.5-10V5.6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 7.5v5.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="16.2" r="1.3" fill="currentColor"/>',
     brain: '<circle cx="12" cy="12" r="8.6" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="11" r="1.4" fill="currentColor"/><circle cx="15" cy="11" r="1.4" fill="currentColor"/><circle cx="12" cy="15.2" r="1.4" fill="currentColor"/><path d="M9 11h6M9 11l3 4.2M15 11l-3 4.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
+    discover: '<circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M15.4 15.4L20.5 20.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="10.5" cy="9" r="2" fill="currentColor"/><path d="M7 13.6c.8-1.6 2-2.3 3.5-2.3s2.7.7 3.5 2.3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
   };
   const icon = a => `<span class="ag-ico" style="color:${AC[a]};background:${AC[a]}22"><svg viewBox="0 0 24 24" aria-hidden="true">${ICON[a]}</svg></span>`;
   const n0 = v => v == null || isNaN(v) ? '—' : Number(v).toLocaleString('en-US');
@@ -333,6 +454,7 @@
   function renderHomeActivity(a) {
     const rows = (a && a.rows) || [];
     $('trades-n').textContent = rows.filter(r => TRADE.includes(r.kind)).length;
+    if (feedShown && cache.state && cache.state.live && !demoOn()) { profitCheck('act', rows.filter(r => r.kind === 'sold' && /^\+/.test(r.value || '')).map(r => 'a:' + (r.mint || '') + ':' + r.id + ':' + r.title)); return; }
     $('home-activity').innerHTML = rows.length ? rows.slice(0, 6).map(actRow).join('') : `<div class="empty-row">${esc((a && a.empty) || 'No trades yet')}</div>`;
     profitCheck('act', rows.filter(r => r.kind === 'sold' && /^\+/.test(r.value || '')).map(r => 'a:' + (r.mint || '') + ':' + r.id + ':' + r.title));
   }
@@ -495,7 +617,7 @@
       <div class="stats"><div><div class="k">Market cap</div><div class="v num">${usdK(st.marketCapUsd)}</div></div><div><div class="k">Liquidity</div><div class="v num">${usdK(st.liquidityUsd)}</div></div>
       <div><div class="k">24h volume</div><div class="v num">${usdK(st.volume24hUsd)}</div></div><div><div class="k">Holders</div><div class="v num">${esc(st.holders == null ? 'n/a' : st.holders)}</div></div></div>`;
     if (p) {
-      h += `<div class="pos"><div class="t">Your position · ${usd(p.sizeUsd)} in · ${esc(p.agent || 'Executor')}</div>
+      h += `<div class="pos"><div class="t">Your position · ${usd(p.sizeUsd)}${p.sizeTier ? ' · ' + esc(p.sizeTier) : ''} in · ${esc(p.agent || 'Executor')}</div>
         <div class="ln"><span class="sec">Entry</span><span class="num">${price(p.entryPrice)}</span></div>
         ${p.open ? '' : `<div class="ln"><span class="sec">Closed · ${esc(p.exitReason)}</span><span class="num ${(p.pnlUsd || 0) >= 0 ? 'green' : 'red'}">${usd(p.pnlUsd)}</span></div>`}</div>`;
       if (p.open && x) h += `<div class="pos"><div class="t">Exit</div>
@@ -610,7 +732,7 @@
     if (!D) return;
     const v = visible(), top = stack[stack.length - 1];
     try {
-      if (v === 'tab-home') { if (cache.state) renderState(cache.state); await loadChart(); renderHomeActivity(await tryGet('activity')); }
+      if (v === 'tab-home') { if (cache.state) renderState(cache.state); await loadChart(); renderHomeActivity(await tryGet('activity')); homeAlert(); }
       else if (v === 'tab-agents') await renderAgents();
       else if (v === 'tab-activity') await renderActivity(false);
       else if (v === 'tab-account') await renderAccount();
@@ -621,7 +743,7 @@
     } catch (e) { if (e && e.net) fail(); else console.error(e); }
   }
   function fail() { if (offline && retryAt > Date.now()) return; failN++; offline = true; retryAt = Date.now() + Math.min(STATE_S * failN, 60) * 1000; errRow(); }
-  let stateT = 0;
+  let stateT = 0, lastChartAt = Date.now(), lastChartTs = null;
   async function pollState() {
     clearTimeout(stateT);
     try {
@@ -630,7 +752,9 @@
       const age = (Date.now() - new Date(s.ts).getTime()) / 1000;
       if (age > STATE_S * 4) throw new Error('stale');
       lastOk = new Date(s.ts); offline = false; failN = 0; errRow();
-      stateT = setTimeout(pollState, STATE_S * 1000);
+      const fast = visible() === 'tab-home' && !document.hidden;
+      if (fast && s.live && lastChartTs !== s.ts && Date.now() - lastChartAt > 14000) { lastChartAt = Date.now(); lastChartTs = s.ts; loadChart(); }
+      stateT = setTimeout(pollState, (fast ? HOME_POLL_S : STATE_S) * 1000);
     } catch (e) {
       if (cache.state) lastOk = lastOk || new Date(cache.state.ts);
       fail(); stateT = setTimeout(pollState, retryAt - Date.now());

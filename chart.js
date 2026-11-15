@@ -12,30 +12,32 @@
   const FAM = '-apple-system, "SF Pro Text", BlinkMacSystemFont, Inter, "Helvetica Neue", sans-serif';
   const FONT = '600 12px ' + FAM;
 
-  // ---- Home line chart: green when the book is at/above the night start, red in drawdown; gradient fill; trade dots
-  // with floating labels ("COIN bought $x" blue, "COIN sold +$x" green, "COIN stop -$x" red) that never overlap ----
+  // ---- Home line chart (live home): green when the book is at/above the night start, red in drawdown; gradient fill.
+  // On first load or a range change the line draws left to right. Trade pills sit on the line: blue "Bought TICKER",
+  // green "+$X", red "-X% -$Y". Every point and pill comes from chart/{range}.json (real balance rows + positions). ----
   const lineState = new WeakMap();
   const money = v => '$' + Math.abs(Number(v)).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-  function markText(m) {   // [coin, action] from the mark's fields; falls back to the server label
-    if (!m.name) return [null, m.label || ''];
-    const u = m.usd;
-    if (m.kind === 'bought') return [m.name, 'bought' + (u != null ? ' ' + money(u) : '')];
-    if (m.kind === 'stop') return [m.name, 'stop ' + (u != null ? '-' + money(u) : '')];
-    return [m.name, 'sold ' + (u != null ? (u >= 0 ? '+' : '-') + money(u) : '')];
+  function markText(m) {
+    const t = m.ticker || m.name;
+    if (m.kind === 'bought') return t ? 'Bought ' + t : (m.label || 'Bought');
+    if (m.kind === 'partial') return (m.label || (m.usd != null ? (m.usd >= 0 ? '+' : '-') + money(m.usd) : '')) + (m.frac ? ' · ' + Math.round(m.frac * 100) + '%' : '');
+    return String(m.label || (m.usd != null ? (m.usd >= 0 ? '+' : '-') + money(m.usd) : '')).replace(/ · /g, ' ');
   }
   function markColor(m) {
     if (m.kind === 'bought') return '#0a84ff';
     if (m.usd != null) return m.usd >= 0 ? '#30d158' : '#ff453a';
     return m.color || '#30d158';
   }
-  function drawLine(canvas, data, prog, markAlpha) {
+  const ease = t => 1 - Math.pow(1 - t, 3);
+  function drawLine(canvas, data, prog, markAlpha, reveal, head) {
     if (!canvas.clientWidth) return (data.points || []).length > 1;
     const {c, w, h} = setup(canvas);
     const pts = data.points || [], start = data.startValue;
-    const top = 8, bot = 14, padX = 14, markH = 40, nRows = 2;
+    const top = 8, bot = 14, padX = 14, pillH = 24, nRows = 2;
     if (pts.length < 2) {
       c.strokeStyle = 'rgba(235,235,245,0.25)'; c.lineWidth = 1; c.setLineDash([4, 4]);
       c.beginPath(); c.moveTo(padX, h * 0.6); c.lineTo(w - padX, h * 0.6); c.stroke(); c.setLineDash([]);
+      if (head) head.hidden = true;
       return false;
     }
     let use = pts;
@@ -49,7 +51,18 @@
     if (y1 - y0 < 1e-9) { y0 -= 1; y1 += 1; }
     const pad = (y1 - y0) * 0.08; y0 -= pad;
     const X = t => padX + (w - 2 * padX - 8) * (x1 === x0 ? 1 : (t - x0) / (x1 - x0));
-    const Y = v => (h - bot) - (h - bot - top - nRows * markH) * ((v - y0) / (y1 - y0));
+    const Y = v => (h - bot) - (h - bot - top - nRows * (pillH + 10)) * ((v - y0) / (y1 - y0));
+    if (reveal < 1) {                              // left-to-right draw: cut the series at the reveal edge
+      const tEdge = x0 + (x1 - x0) * reveal, cut = [];
+      for (let i = 0; i < use.length; i++) {
+        const p = use[i];
+        if (p[0] <= tEdge) { cut.push(p); continue; }
+        const q = use[i - 1];
+        if (q) { const f = (tEdge - q[0]) / ((p[0] - q[0]) || 1); cut.push([tEdge, q[1] + (p[1] - q[1]) * f]); }
+        break;
+      }
+      use = cut.length > 1 ? cut : use.slice(0, 2).map((p, i) => i ? [Math.max(p[0], x0 + 1e-6), use[0][1]] : p);
+    }
     const lastV = pts[pts.length - 1][1], up = start == null || lastV >= start;
     const col = up ? '#30d158' : '#ff453a', rgb = up ? '48,209,88' : '255,69,58';
     if (start != null) {
@@ -63,37 +76,43 @@
     c.strokeStyle = col; c.lineWidth = 2.2; c.lineJoin = 'round'; c.lineCap = 'round'; c.stroke(); c.restore();
     const last = use[use.length - 1];
     c.lineTo(X(last[0]), h); c.lineTo(X(use[0][0]), h); c.closePath(); c.fillStyle = g; c.fill();
-    // live head dot
-    c.fillStyle = `rgba(${rgb},0.25)`; c.beginPath(); c.arc(X(last[0]), Y(last[1]), 7, 0, Math.PI * 2); c.fill();
-    c.fillStyle = col; c.beginPath(); c.arc(X(last[0]), Y(last[1]), 3.6, 0, Math.PI * 2); c.fill();
-    // trade markers: dot on the line + dashed stem + a two-line label card above
+    // head dot (the pulsing ring is a CSS element placed on top, so no redraw loop runs while idle)
+    const hx = X(last[0]), hy = Y(last[1]);
+    c.fillStyle = col; c.beginPath(); c.arc(hx, hy, 3.6, 0, Math.PI * 2); c.fill();
+    if (head) { head.hidden = false; head.style.transform = `translate(${hx.toFixed(1)}px,${hy.toFixed(1)}px)`; head.style.color = col; }
+    // trade pills: dot on the line + dashed stem + one rounded pill above, rows so they never overlap
     const valAt = t => { let best = pts[0]; for (const p of pts) { if (p[0] <= t) best = p; } return best[1]; };
+    const tEdge = x0 + (x1 - x0) * reveal;
     const placed = [];
     for (const m of (data.marks || []).slice().sort((a, b) => a.ts - b.ts)) {
       if (m.ts < x0 || m.ts > x1 + 60) continue;
-      const [coin, act] = markText(m), mc = markColor(m), a = markAlpha(m);
+      if (reveal < 1 && m.ts > tEdge) continue;
+      const txt = markText(m), mc = markColor(m), a = markAlpha(m);
+      if (a <= 0) continue;
       const mx = X(Math.min(m.ts, x1)), my = Y(valAt(m.ts));
-      c.font = '700 12px ' + FAM; const w1 = coin ? c.measureText(coin).width + (m.mult ? c.measureText(m.mult.toFixed(2) + 'x').width + 14 : 0) : 0;
-      c.font = '600 12px ' + FAM; const w2 = c.measureText(act).width;
-      const tw = Math.max(w1, w2) + 18, th = coin ? 34 : 20;
+      c.font = '700 12px ' + FAM;
+      const dotW = m.kind === 'bought' ? 14 : 0;
+      const tw = c.measureText(txt).width + 20 + dotW, th = pillH;
       const cx = Math.min(Math.max(mx, padX + tw / 2), w - padX - tw / 2);
-      let row = 0;
-      while (row < 6 && placed.some(p => p.row === row && Math.abs(p.cx - cx) < (p.tw + tw) / 2 + 4)) row++;
-      placed.push({cx, tw, row});
-      const ly = Math.max(2, Math.min(my - th - 14, top + (nRows - 1) * markH + 4) - row * (th + 4));
-      c.globalAlpha = a;
+      // place the pill above its dot; if it would touch another pill, step up (then down) until it is free
+      const ly0 = Math.max(2, Math.min(my - th - 14, top + (nRows - 1) * (th + 10)));
+      const hit = y => placed.some(p => Math.abs(p.cx - cx) < (p.tw + tw) / 2 + 4 && Math.abs(p.y - y) < th + 4);
+      let ly = ly0;
+      for (let k = 1; k < 10 && hit(ly); k++) { const upY = ly0 - k * (th + 5), dnY = ly0 + k * (th + 5);
+        ly = upY >= 2 && !hit(upY) ? upY : (dnY < my - th - 6 && !hit(dnY) ? dnY : (upY >= 2 ? upY : dnY)); }
+      placed.push({cx, tw, y: ly});
+      const sc = 0.7 + 0.3 * ease(Math.min(1, a));
+      c.globalAlpha = Math.min(1, a);
       c.strokeStyle = mc + '99'; c.lineWidth = 1; c.setLineDash([2, 3]);
       c.beginPath(); c.moveTo(mx, ly + th); c.lineTo(mx, my - 5); c.stroke(); c.setLineDash([]);
-      c.fillStyle = 'rgba(10,10,12,0.92)'; roundRect(c, cx - tw / 2, ly, tw, th, 9); c.fill();
-      c.fillStyle = mc + '26'; roundRect(c, cx - tw / 2, ly, tw, th, 9); c.fill();
-      c.strokeStyle = mc; c.lineWidth = 1.2; roundRect(c, cx - tw / 2 + .5, ly + .5, tw - 1, th - 1, 9); c.stroke();
-      c.textBaseline = 'middle'; let tx = cx - tw / 2 + 9;
-      if (coin) {
-        c.font = '700 12px ' + FAM; c.fillStyle = '#fff'; c.fillText(coin, tx, ly + 10);
-        if (m.mult) { const bx = tx + c.measureText(coin).width + 6, bt = m.mult.toFixed(2) + 'x'; c.font = '700 10px ' + FAM;
-          const bw = c.measureText(bt).width + 8; c.fillStyle = mc + '40'; roundRect(c, bx, ly + 3.5, bw, 13, 6); c.fill(); c.fillStyle = mc; c.fillText(bt, bx + 4, ly + 10.5); }
-        c.font = '600 12px ' + FAM; c.fillStyle = mc; c.fillText(act, tx, ly + 24);
-      } else { c.font = '600 12px ' + FAM; c.fillStyle = mc; c.fillText(act, tx, ly + th / 2 + .5); }
+      c.save(); c.translate(cx, ly + th / 2); c.scale(sc, sc);
+      c.fillStyle = 'rgba(10,10,12,0.94)'; roundRect(c, -tw / 2, -th / 2, tw, th, th / 2); c.fill();
+      c.fillStyle = mc + '30'; roundRect(c, -tw / 2, -th / 2, tw, th, th / 2); c.fill();
+      c.strokeStyle = mc; c.lineWidth = 1.2; roundRect(c, -tw / 2 + .5, -th / 2 + .5, tw - 1, th - 1, th / 2 - .5); c.stroke();
+      c.textBaseline = 'middle'; let tx = -tw / 2 + 10;
+      if (dotW) { c.fillStyle = mc; c.beginPath(); c.arc(tx + 4, 0.5, 4, 0, Math.PI * 2); c.fill(); tx += dotW; }
+      c.fillStyle = m.kind === 'bought' ? '#fff' : mc; c.fillText(txt, tx, 1);
+      c.restore();
       c.fillStyle = '#000'; c.beginPath(); c.arc(mx, my, 5, 0, Math.PI * 2); c.fill();
       c.strokeStyle = mc; c.lineWidth = 2; c.beginPath(); c.arc(mx, my, 4.2, 0, Math.PI * 2); c.stroke();
       c.globalAlpha = 1;
@@ -103,22 +122,42 @@
   function roundRect(c, x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r);
     c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
 
-  function line(canvas, data) {
-    const st = lineState.get(canvas) || {n: 0, seen: new Set(), born: new Map()};
+  // opts.reveal: draw left to right (first load / range change). opts.head: element for the pulsing head ring.
+  function line(canvas, data, opts) {
+    opts = opts || {};
+    const st = lineState.get(canvas) || {n: 0, seen: new Set(), born: new Map(), raf: 0};
     const n = (data.points || []).length, grew = st.n && n > st.n;
     st.n = n; lineState.set(canvas, st);
-    const now = performance.now();
-    for (const m of data.marks || []) { const k = m.ts + m.label; if (!st.seen.has(k)) { st.seen.add(k); st.born.set(k, RM() ? 0 : now); } }
-    const alpha = m => { const b = st.born.get(m.ts + m.label) || 0; return Math.min(1, (performance.now() - b) / 200); };
-    if (RM() || !grew) { const r = drawLine(canvas, data, 1, alpha); animMarks(canvas, data, alpha); return r; }
-    const t0 = performance.now();
-    const step = () => { const p = Math.min(1, (performance.now() - t0) / 250); drawLine(canvas, data, p, alpha); if (p < 1) requestAnimationFrame(step); };
-    requestAnimationFrame(step); return n >= 2;
-  }
-  function animMarks(canvas, data, alpha) {
-    if (!(data.marks || []).some(m => alpha(m) < 1)) return;
-    const step = () => { drawLine(canvas, data, 1, alpha); if ((data.marks || []).some(m => alpha(m) < 1)) requestAnimationFrame(step); };
-    requestAnimationFrame(step);
+    cancelAnimationFrame(st.raf);
+    const now = performance.now(), key = m => m.ts + '|' + m.kind + '|' + (m.mint || '');
+    const reveal = opts.reveal && !RM() && n > 1;
+    for (const m of data.marks || []) { const k = key(m); if (!st.seen.has(k)) { st.seen.add(k); st.born.set(k, RM() || reveal ? -1 : now); } }
+    let rv = reveal ? 0 : 1, t0 = performance.now();
+    const x0 = n ? data.points[0][0] : 0, x1 = n ? data.points[n - 1][0] : 1;
+    const alpha = m => {   // pills pop in when the line reaches them (reveal) or when they are new (live)
+      let b = st.born.get(key(m));
+      if (b === -1) {
+        if (RM() || rv >= 1) return 1;
+        const at = (m.ts - x0) / ((x1 - x0) || 1);
+        if (rv < at) return 0;
+        st.born.set(key(m), performance.now()); b = performance.now();
+      }
+      return Math.min(1, (performance.now() - (b || 0)) / 320);
+    };
+    const pending = () => (data.marks || []).some(m => alpha(m) < 1);
+    if (RM() || (!grew && !reveal)) {
+      const r = drawLine(canvas, data, 1, alpha, 1, opts.head);
+      if (!RM() && pending()) { const step = () => { drawLine(canvas, data, 1, alpha, 1, opts.head); if (pending()) st.raf = requestAnimationFrame(step); }; st.raf = requestAnimationFrame(step); }
+      return r;
+    }
+    const DUR = reveal ? 1400 : 300;
+    const step = () => {
+      const p = Math.min(1, (performance.now() - t0) / DUR);
+      if (reveal) rv = ease(p);
+      drawLine(canvas, data, reveal ? 1 : p, alpha, rv, opts.head);
+      if (p < 1 || pending()) st.raf = requestAnimationFrame(step);
+    };
+    st.raf = requestAnimationFrame(step); return n >= 2;
   }
 
   // ---- Coin candles (1-min OHLC from db.prices) + volume bars + orange dashed "Risk trailing stop" ----

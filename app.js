@@ -412,7 +412,7 @@
     } else if (a === 'analyst') {
       const has = c.score != null && !isNaN(c.score), nm = c.name || (c.mint ? coinName(c.mint) : '');
       const pass = c.pass != null ? c.pass : has && c.score >= (c.greenFrom || 70);
-      if (has) { coin = {name: nm, mint: c.mint, image: c.image}; line = `<b>${esc(nm || short(c.mint))}</b> ${c.pass == null && c.score < (c.greenFrom || 70) ? 'scoring…' : pass ? '<span class="green">pass</span>' : '<span class="red">fail</span>'} · from ${esc(c.greenFrom || 70)}`;
+      if (has) { coin = {name: nm, mint: c.mint, image: c.image}; line = `<b>${esc(nm || short(c.mint))}</b> ${c.pass == null && c.score < (c.greenFrom || 70) ? 'scoring…' : pass ? '<span class="green">pass</span>' : '<span class="red">chumbou</span>'} · ${c.why && !pass ? esc(c.why) : 'from ' + esc(c.greenFrom || 70)}`;
         val = `score ${Math.round(c.score)}`; vc = pass ? 'green' : c.pass === false ? 'red' : ''; hot = recent(c.ts, 120); }
       else { line = 'waiting'; val = '<span class="ter">—</span>'; }
     } else if (a === 'executor') {

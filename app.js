@@ -255,6 +255,11 @@
   function xpPct(v) { return v == null || isNaN(v) ? '' : ` <span class="num ${v >= 0 ? 'green' : 'red'}">(${v >= 0 ? '+' : ''}${Number(v).toFixed(1)}%)</span>`; }
   const XP_WHY = {stop: 'stop', trail: 'trail', timeout: 'tempo', pulled: 'liquidez saiu', 'dev dumping': 'dev vendeu'};
   const XP_SRC = {band: 'liq baixa', chase: 'subiu muito'};
+  const XP_BOT = {scanner: 'Scanner', auditor: 'Auditor', analyst: 'Analyst', brain: 'Brain'};
+  function xpVotes(v) {
+    if (!v || !v.bots) return '';
+    return `<div class="xp-votes small">${Object.entries(v.bots).map(([b, x]) => `<span class="xp-vote ${x.yes ? 'green' : 'red'}" title="${esc(x.why || '')}">${esc(XP_BOT[b] || b)} ${x.yes ? '✓' : '✗'}</span>`).join(' ')} <span class="ter">${n0(v.yes || 0)}/4</span></div>`;
+  }
   function renderExplore(x) {
     const h = $('xp-h'), box = $('xp-box');
     if (!h || !box) return;
@@ -264,11 +269,17 @@
     $('xp-on').className = 'xp-on small ' + (x.on ? 'green' : 'ter');
     const rule = `Liq mín. $${n0(x.minLiqUsd)} · score mín. ${n0(x.minScore)} · subida até +${n0(x.maxChaseH1Pct)}% em 1h · $${n0(x.sizeUsd)} por trade · à parte da desk`;
     const follow = (x.followingList || []).map(f => `<span class="xp-chip">${esc(f.symbol)} <small class="ter">${n0(f.ageMin)} min</small></span>`).join('') || '<span class="ter small">nenhuma agora</span>';
-    const opens = (x.openPositions || []).map(p => `<div class="xp-row"><b>${esc(p.symbol)}</b> <span class="ter small">${esc(XP_SRC[p.source] || p.source || '')}${p.partial ? ' · 50% vendido' : ''}</span><span class="xp-v">${xpMoney(p.pnlUsd)}${xpPct(p.pnlPct)}</span></div>`).join('') || '<div class="xp-row ter small">Nenhuma aberta</div>';
-    const done = (x.closedTrades || []).map(c => `<div class="xp-row"><b>${esc(c.symbol)}</b> <span class="ter small">${esc(XP_WHY[c.reason] || c.reason || 'venda')}${c.closedAt ? ' · ' + esc(whenTxt(c.closedAt)) : ''}</span><span class="xp-v">${xpMoney(c.pnlUsd)}${xpPct(c.pnlPct)}</span></div>`).join('') || '<div class="xp-row ter small">Ainda sem trades fechados</div>';
+    const opens = (x.openPositions || []).map(p => `<div class="xp-row"><b>${esc(p.symbol)}</b> <span class="ter small">${p.session ? 'treino · ' : ''}${esc(XP_SRC[p.source] || (p.source === 'consenso' ? '' : p.source) || '')}${p.partial ? ' · 50% vendido' : ''}</span><span class="xp-v">${xpMoney(p.pnlUsd)}${xpPct(p.pnlPct)}</span></div>${xpVotes(p.votes)}`).join('') || '<div class="xp-row ter small">Nenhuma aberta</div>';
+    const done = (x.closedTrades || []).map(c => `<div class="xp-row"><b>${esc(c.symbol)}</b> <span class="ter small">${c.session ? 'treino · ' : ''}${esc(XP_WHY[c.reason] || c.reason || 'venda')}${c.closedAt ? ' · ' + esc(whenTxt(c.closedAt)) : ''}</span><span class="xp-v">${xpMoney(c.pnlUsd)}${xpPct(c.pnlPct)}</span></div>${xpVotes(c.votes)}`).join('') || '<div class="xp-row ter small">Ainda sem trades fechados</div>';
+    const t = x.treino || {};
+    const tr = t.started || t.on ? `<div class="xp-lbl">Treino por consenso ${t.on ? '<span class="green">· ligado até ' + esc(hm(t.untilAt)) + '</span>' : '<span class="ter">· desligado</span>'}</div>
+      <div class="xp-rule ter small">3 de 4 bots (Scanner, Auditor, Analyst, Brain) + anti-rug · sem filtros fixos · $${n0(t.sizeUsd || 25)} por trade · só PAPER</div>
+      <div class="xp-sub ter small">Votadas ${n0(t.voted || 0)} · compras ${n0(t.buys || 0)} · fechados ${n0(t.closed || 0)} (${n0(t.wins || 0)} a ganhar) · resultado ${xpMoney(t.totalUsd)}</div>
+      <div class="xp-sub ter small">Acerto: ${Object.entries(t.accuracy || {}).map(([b, a]) => `${esc(XP_BOT[b] || b)} ${n0(a.right)}/${n0(a.total)}`).join(' · ')}</div>` : '';
     const html = `<div class="xp-rule ter small">${esc(rule)}</div>
       <div class="xp-total"><span>Resultado total</span><b>${xpMoney(x.totalUsd)}</b></div>
       <div class="xp-sub ter small">Fechados ${n0(x.closed || 0)} (${n0(x.wins || 0)} a ganhar) ${xpMoney(x.pnlUsd)} · abertas ${n0(x.open || 0)}/${n0(x.maxOpen || 5)} ${xpMoney(x.openPnlUsd)}</div>
+      ${tr}
       <div class="xp-lbl">A seguir (${n0(x.following || 0)})</div><div class="xp-chips">${follow}</div>
       <div class="xp-lbl">Abertas</div>${opens}
       <div class="xp-lbl">Fechadas</div>${done}`;

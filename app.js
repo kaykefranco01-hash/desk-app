@@ -240,6 +240,7 @@
     const L = !demoOn() && s.live && s.live.bots ? s.live : null;
     const $b = $('balance'); $b.classList.toggle('red', (s.pnl_usd != null ? s.pnl_usd : (s.balance || 0) - (s.night_start || 0)) < 0);
     $('pnl-since').textContent = s.nightStartAt ? 'desde as ' + hm(s.nightStartAt) : '';
+    renderExplore(demoOn() ? null : s.explore);
     if (L) { renderLive(s, L); return; }
     lastTradeLine(null, s);
     const running = ORDER.filter(a => (s.agents || {})[a] && s.agents[a].running).length;
@@ -247,6 +248,31 @@
     const hot = demoOn() && DEMO.step ? DEMO.step.agent : null;
     liveRows = null;
     $('ag-rows').innerHTML = ORDER.map(a => agRow(a, (s.cards || {})[a] || {}, s, hot)).join('');
+  }
+
+  // ---------- PISTA DE TREINO (state.explore, Kayke t308u): separate PAPER-only lane, own numbers only ----------
+  function xpMoney(v) { if (v == null || isNaN(v)) return '<span class="ter">—</span>'; const n = Number(v); return `<span class="num ${n >= 0 ? 'green' : 'red'}">${n >= 0 ? '+' : '-'}$${Math.abs(n).toFixed(2)}</span>`; }
+  function xpPct(v) { return v == null || isNaN(v) ? '' : ` <span class="num ${v >= 0 ? 'green' : 'red'}">(${v >= 0 ? '+' : ''}${Number(v).toFixed(1)}%)</span>`; }
+  const XP_WHY = {stop: 'stop', trail: 'trail', timeout: 'tempo', pulled: 'liquidez saiu', 'dev dumping': 'dev vendeu'};
+  const XP_SRC = {band: 'liq baixa', chase: 'subiu muito'};
+  function renderExplore(x) {
+    const h = $('xp-h'), box = $('xp-box');
+    if (!h || !box) return;
+    if (!x) { h.hidden = true; box.hidden = true; return; }
+    h.hidden = false; box.hidden = false;
+    $('xp-on').textContent = x.on ? '· ligada' : '· desligada';
+    $('xp-on').className = 'xp-on small ' + (x.on ? 'green' : 'ter');
+    const rule = `Liq mín. $${n0(x.minLiqUsd)} · score mín. ${n0(x.minScore)} · subida até +${n0(x.maxChaseH1Pct)}% em 1h · $${n0(x.sizeUsd)} por trade · à parte da desk`;
+    const follow = (x.followingList || []).map(f => `<span class="xp-chip">${esc(f.symbol)} <small class="ter">${n0(f.ageMin)} min</small></span>`).join('') || '<span class="ter small">nenhuma agora</span>';
+    const opens = (x.openPositions || []).map(p => `<div class="xp-row"><b>${esc(p.symbol)}</b> <span class="ter small">${esc(XP_SRC[p.source] || p.source || '')}${p.partial ? ' · 50% vendido' : ''}</span><span class="xp-v">${xpMoney(p.pnlUsd)}${xpPct(p.pnlPct)}</span></div>`).join('') || '<div class="xp-row ter small">Nenhuma aberta</div>';
+    const done = (x.closedTrades || []).map(c => `<div class="xp-row"><b>${esc(c.symbol)}</b> <span class="ter small">${esc(XP_WHY[c.reason] || c.reason || 'venda')}${c.closedAt ? ' · ' + esc(whenTxt(c.closedAt)) : ''}</span><span class="xp-v">${xpMoney(c.pnlUsd)}${xpPct(c.pnlPct)}</span></div>`).join('') || '<div class="xp-row ter small">Ainda sem trades fechados</div>';
+    const html = `<div class="xp-rule ter small">${esc(rule)}</div>
+      <div class="xp-total"><span>Resultado total</span><b>${xpMoney(x.totalUsd)}</b></div>
+      <div class="xp-sub ter small">Fechados ${n0(x.closed || 0)} (${n0(x.wins || 0)} a ganhar) ${xpMoney(x.pnlUsd)} · abertas ${n0(x.open || 0)}/${n0(x.maxOpen || 5)} ${xpMoney(x.openPnlUsd)}</div>
+      <div class="xp-lbl">A seguir (${n0(x.following || 0)})</div><div class="xp-chips">${follow}</div>
+      <div class="xp-lbl">Abertas</div>${opens}
+      <div class="xp-lbl">Fechadas</div>${done}`;
+    if (box.dataset.k !== html) { box.dataset.k = html; box.innerHTML = html; }
   }
 
   // ---------- LIVE HOME (state.live): bot rows + activity feed, all from desk.db rows on the server ----------

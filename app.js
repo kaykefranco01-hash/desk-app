@@ -198,7 +198,54 @@
   // ---------- HOME ----------
   let range = 'LIVE';
   function renderRanges() { $('ranges').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.r === range)); }
+  // t340u: the training lane is the main view (big number, today, chart, last trade); main desk is a secondary line
+  const trainHome = s => (!demoOn() && s && s.explore && s.explore.home) ? s.explore.home : null;
+  let viewMain = (() => { try { return localStorage.getItem('homeView') === 'mesa'; } catch (e) { return false; } })();
+  const trainView = () => !viewMain && !!trainHome(cache.state);
+  function drawTrain(h) {
+    const reveal = drawnRange !== 'TREINO'; drawnRange = 'TREINO';
+    window.DeskChart.line($('chart'), h.chart, {reveal, head: $('chart-head')});
+    $('chart-empty').textContent = h.chart.empty || '';
+    $('chart-empty').hidden = !h.chart.empty;
+  }
+  function renderTrainHome(s, h) {
+    odometer($('balance'), usd(h.stackUsd)); fitBalance();
+    pnlRow(h.stackUsd, h.todayStartUsd, h.todayPct, h.baseUsd ? h.stackUsd / h.baseUsd : 1);
+    $('balance').classList.toggle('red', (h.todayUsd || 0) < 0);
+    $('pnl-since').textContent = 'treino · desde as ' + hm(h.todayFromAt);
+    $('open-n').textContent = n0(h.open || 0);
+    renderOpenPos([]);
+    $('ranges').hidden = true;
+    drawTrain(h);
+    lastTradeLine(h.lastTrade, s);
+  }
+  function renderViewSw(s, h) {
+    const el = $('view-sw'); if (!el) return;
+    if (!h) { el.hidden = true; $('ranges').hidden = false; return; }
+    el.hidden = false;
+    const html = viewMain
+      ? `<button type="button" class="vs-btn" id="vs-go">Ver treino</button> <span class="ter">Banca de treino ${usd(h.stackUsd)}</span>`
+      : `<span class="ter">Banca de treino (PAPER) · início ${usd(h.baseUsd)} · Mesa principal ${usd(s.balance)}</span> <button type="button" class="vs-btn" id="vs-go">Ver mesa</button>`;
+    if (el.dataset.k !== html) { el.dataset.k = html; el.innerHTML = html; }
+    $('vs-go').onclick = () => {
+      viewMain = !viewMain; try { localStorage.setItem('homeView', viewMain ? 'mesa' : 'treino'); } catch (e) { /* private mode */ }
+      drawnRange = null; if (cache.state) renderState(cache.state); loadChart();
+    };
+  }
+  function renderDays(h) {
+    const hh = $('days-h'), box = $('days-box'); if (!hh || !box) return;
+    if (!h || !(h.days || []).length) { hh.hidden = true; box.hidden = true; return; }
+    hh.hidden = false; box.hidden = false;
+    const cmp = d => d.better == null ? '<span class="ter">—</span>'
+      : `<span class="${d.better ? 'green' : 'red'}">${d.better ? '▲ melhor' : '▼ pior'} ${xpMoney(d.vsPrevUsd)}</span>`;
+    const tag = (ok, a, b) => ok == null ? '' : `<span class="ter small">${ok ? a : b}</span>`;
+    const html = h.days.map(d => `<div class="day-row${d.current ? ' cur' : ''}"><b>${esc(d.label)}${d.current ? ' · hoje' : ''}</b>
+      <span class="xp-v">${xpMoney(d.pnlUsd)}</span>
+      <div class="day-sub small"><span class="ter">${n0(d.trades)} trades · ${n0(d.wins)} a ganhar</span> · ${cmp(d)} ${tag(d.lostLess, '· perdeu menos', '· perdeu mais')} ${tag(d.wonMore, '· ganhou mais', '· ganhou menos')}</div></div>`).join('');
+    if (box.dataset.k !== html) { box.dataset.k = html; box.innerHTML = html; }
+  }
   async function loadChart() {
+    if (trainView()) { drawTrain(trainHome(cache.state)); return; }
     try { const c = await tryGet('chart/' + range); if (c) drawChart(c); } catch (e) { if (cache['chart/' + range]) drawChart(cache['chart/' + range]); }
     $('ranges').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.r === range));
   }
@@ -220,7 +267,7 @@
     const m = $('mult'); m.classList.remove('skel-i'); m.textContent = Number(mult || 1).toFixed(2) + 'x'; m.classList.toggle('down', !up);
   }
   function renderState(s) {
-    odometer($('balance'), usd(s.balance));
+    if (!(trainHome(s) && !viewMain)) odometer($('balance'), usd(s.balance));
     const mode = s.mode === 'DEMO' ? 'DEMO' : s.mode === 'LIVE' ? 'LIVE' : 'PAPER';
     const fresh = Math.abs(Date.now() - new Date(s.ts).getTime()) < STATE_S * 4000;
     const mp = $('paper');
@@ -241,8 +288,11 @@
     const $b = $('balance'); $b.classList.toggle('red', (s.pnl_usd != null ? s.pnl_usd : (s.balance || 0) - (s.night_start || 0)) < 0);
     $('pnl-since').textContent = s.nightStartAt ? 'desde as ' + hm(s.nightStartAt) : '';
     renderExplore(demoOn() ? null : s.explore);
-    if (L) { renderLive(s, L); return; }
-    lastTradeLine(null, s);
+    const H = trainHome(s);
+    renderViewSw(s, H); renderDays(H);
+    if (H && !viewMain) renderTrainHome(s, H); else $('ranges').hidden = false;
+    if (L) { renderLive(s, L); if (H && !viewMain) lastTradeLine(H.lastTrade, s); return; }
+    lastTradeLine(H && !viewMain ? H.lastTrade : null, s);
     const running = ORDER.filter(a => (s.agents || {})[a] && s.agents[a].running).length;
     $('agents-running').textContent = running; $('agents-running').classList.remove('skel-i');
     const hot = demoOn() && DEMO.step ? DEMO.step.agent : null;

@@ -35,10 +35,13 @@
       <div id="balance" class="balance num skel" aria-live="polite">$000.00</div>
     </div>
     <div class="sub-row"><span id="today" class="num today skel-i">▲ $0.00 (0.00%)</span><span id="mult" class="pill-mult num skel-i">1.00x</span><span id="pnl-since" class="pnl-since ter small"></span></div>
+    <div id="view-sw" class="view-sw small" hidden></div>
     <div id="open-pos" class="open-pos" hidden></div>
     <div class="chart-wrap" id="chart-wrap"><canvas id="chart" aria-label="Gráfico do saldo"></canvas><i id="chart-head" class="chart-head" hidden></i>
       <div id="chart-empty" class="chart-empty" hidden>Waiting for the first trade</div></div>
     <div class="ranges" id="ranges"><button class="on" data-r="LIVE"><i class="live-dot"></i>LIVE</button><button data-r="1H">1H</button><button data-r="4H">4H</button><button data-r="1D">1D</button><button data-r="1W">1W</button><button data-r="ALL">ALL</button></div>
+    <h2 class="h2 row-h" id="days-h" hidden>Treino por dia <span class="ter small">08:00–08:00 Lisboa</span></h2>
+    <div id="days-box" class="days-box" hidden aria-live="polite"></div>
     <h2 class="h2 row-h ag-h">Bots <span class="ag-run green"><span id="agents-running" class="num skel-i">6</span> a correr</span></h2>
     <div id="ag-rows" class="ag-rows" aria-label="Bots"></div>
     <h2 class="h2 row-h">Atividade <button class="see-all green" data-go="activity">Ver tudo <span id="trades-n" class="num" hidden>0</span>›</button></h2>

@@ -478,3 +478,10 @@ body.demo .gt-top{margin-top:0}
 .xp-row .xp-v{margin-left:auto;white-space:nowrap}
 .xp-votes{display:flex;flex-wrap:wrap;gap:6px;margin:-2px 0 6px 0}
 .xp-vote{border-radius:999px;padding:1px 8px;background:rgba(127,127,127,.12);font-size:12px}
+.view-sw{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:2px 0 6px}
+.vs-btn{background:rgba(255,159,10,.16);color:#ff9f0a;border:0;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600}
+.days-box{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+.day-row{position:relative;background:rgba(127,127,127,.08);border-radius:12px;padding:8px 12px}
+.day-row.cur{outline:1px dashed rgba(255,159,10,.6)}
+.day-row .xp-v{position:absolute;right:12px;top:8px}
+.day-sub{margin-top:2px}

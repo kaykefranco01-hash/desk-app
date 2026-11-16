@@ -275,6 +275,7 @@
     const tr = t.started || t.on ? `<div class="xp-lbl">Treino por consenso ${t.on ? (t.continuous ? '<span class="green">· ligado · contínuo 24h (dia ' + n0(t.day || 1) + ', novo dia às ' + esc(hm(t.untilAt)) + ')</span>' : '<span class="green">· ligado até ' + esc(hm(t.untilAt)) + '</span>') : '<span class="ter">· desligado</span>'}</div>
       <div class="xp-rule ter small">3 de 4 bots (Scanner, Auditor, Analyst, Brain) + anti-rug · sem filtros fixos · $${n0(t.sizeUsd || 25)} por trade · só PAPER</div>
       <div class="xp-sub ter small">Votadas ${n0(t.voted || 0)} · compras ${n0(t.buys || 0)} · fechados ${n0(t.closed || 0)} (${n0(t.wins || 0)} a ganhar) · resultado ${xpMoney(t.totalUsd)}</div>
+      ${t.dailyStop && t.dailyStop.on ? `<div class="xp-sub small ${t.dailyStop.blocked ? 'red' : 'ter'}">Stop diário: ${xpMoney(t.dailyStop.realizedTodayUsd)} hoje vs -$${n0(t.dailyStop.limitUsd)}${t.dailyStop.blocked ? ' · sem compras novas até 08:00' : ''}</div>` : ''}
       <div class="xp-sub ter small">Acerto: ${Object.entries(t.accuracy || {}).map(([b, a]) => `${esc(XP_BOT[b] || b)} ${n0(a.right)}/${n0(a.total)}`).join(' · ')}</div>` : '';
     const html = `<div class="xp-rule ter small">${esc(rule)}</div>
       <div class="xp-total"><span>Resultado total</span><b>${xpMoney(x.totalUsd)}</b></div>

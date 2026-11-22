@@ -1158,17 +1158,22 @@
   const LIVE_MAX_AGE_S = 15 * 60;
   const LIVE_CAPTION_URL = 'https://raw.githubusercontent.com/kaykefranco01-hash/desk-app/live-screen/live/caption.json';
   const LIVE_FRAME_URL = 'https://raw.githubusercontent.com/kaykefranco01-hash/desk-app/live-screen/live/frame.jpg';
+  const LIVE_AC = {scanner: '#0a84ff', auditor: '#bf5af2', analyst: '#30d158', executor: '#ff9f0a', risk: '#ff453a', brain: '#5e5ce6', discover: '#64d2ff'};
   function agoPt(s) {
     if (s < 45) return 'agora';
     if (s < 3600) return 'há ' + Math.max(1, Math.round(s / 60)) + ' min';
     return 'há ' + Math.round(s / 3600) + ' h';
+  }
+  function liveHex(c, actor) {
+    if (/^#[0-9a-fA-F]{6}$/.test(c || '')) return c;
+    return LIVE_AC[actor] || '#30d158';
   }
   function showLivePlaceholder() {
     const img = $('live-frame'), ph = $('live-ph'), cap = $('live-cap'), badge = $('live-badge');
     if (img) { img.removeAttribute('src'); img.hidden = true; }
     if (ph) ph.hidden = false;
     if (cap) cap.textContent = '';
-    if (badge) { badge.hidden = true; badge.textContent = ''; }
+    if (badge) { badge.hidden = true; badge.textContent = ''; badge.style.removeProperty('--ac'); }
   }
   async function pollLiveScreen() {
     const img = $('live-frame'), ph = $('live-ph'), cap = $('live-cap'), badge = $('live-badge');
@@ -1183,10 +1188,24 @@
         img.onload = () => { img.hidden = false; ph.hidden = true; };
         img.onerror = () => showLivePlaceholder();
         if (img.src !== src) img.src = src; else { img.hidden = false; ph.hidden = true; }
-        if (cap) cap.textContent = [j.caption || '', agoPt(age)].filter(Boolean).join(' · ');
+        const label = j.actor_label || '';
+        if (cap) {
+          const bits = [];
+          if (label && j.trade && j.trade !== label) bits.push(j.trade);
+          else if (!label && (j.caption || '')) bits.push(j.caption);
+          bits.push(agoPt(age));
+          cap.textContent = bits.filter(Boolean).join(' · ');
+        }
         if (badge) {
-          if (j.badge) { badge.hidden = false; badge.textContent = j.badge; }
-          else { badge.hidden = true; badge.textContent = ''; }
+          if (label || j.badge) {
+            badge.hidden = false;
+            badge.style.setProperty('--ac', liveHex(j.actor_color, j.actor));
+            badge.replaceChildren();
+            const dot = document.createElement('i');
+            dot.className = 'live-actor-dot';
+            badge.appendChild(dot);
+            badge.appendChild(document.createTextNode(label || j.badge));
+          } else { badge.hidden = true; badge.textContent = ''; }
         }
         shown = true;
       }

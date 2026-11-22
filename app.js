@@ -15,7 +15,7 @@
   const RM = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
   const safe = u => (typeof u === 'string' && /^https:\/\/[^\s"'<>]+$/.test(u)) ? u : null;   // pass-through only, never built here
-  const ORDER = ['scanner', 'auditor', 'analyst', 'executor', 'risk', 'brain'];
+  const ORDER = ['scanner', 'auditor', 'analyst', 'executor', 'risk', 'brain', 'discover'];
   const NAMES = {scanner: 'Scanner', auditor: 'Auditor', analyst: 'Analyst', executor: 'Executor', risk: 'Risk', brain: 'Brain', discover: 'Discover'};
   const COLORS = {scanner: '#0a84ff', auditor: '#bf5af2', analyst: '#30d158', executor: '#ff9f0a', risk: '#ff453a', brain: '#5e5ce6'};   // same colours as the Home rows
 

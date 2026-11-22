@@ -201,7 +201,8 @@
   // t340u: the training lane is the main view (big number, today, chart, last trade); main desk is a secondary line
   const trainHome = s => (!demoOn() && s && s.explore && s.explore.home) ? s.explore.home : null;
   let viewMain = (() => { try { return localStorage.getItem('homeView') === 'mesa'; } catch (e) { return false; } })();
-  const trainView = () => !viewMain && !!trainHome(cache.state);
+  // Início cleanup (Kayke t369u): PAPER desk is the home view. The training-lane main view is off.
+  const trainView = () => false;
   function drawTrain(h) {
     const reveal = drawnRange !== 'TREINO'; drawnRange = 'TREINO';
     window.DeskChart.line($('chart'), h.chart, {reveal, head: $('chart-head')});
@@ -243,6 +244,63 @@
       <span class="xp-v">${xpMoney(d.pnlUsd)}</span>
       <div class="day-sub small"><span class="ter">${n0(d.trades)} trades · ${n0(d.wins)} a ganhar</span> · ${cmp(d)} ${tag(d.lostLess, '· perdeu menos', '· perdeu mais')} ${tag(d.wonMore, '· ganhou mais', '· ganhou menos')}</div></div>`).join('');
     if (box.dataset.k !== html) { box.dataset.k = html; box.innerHTML = html; }
+  }
+  function nightWindow(j) {
+    const w = (j && j.window) || {};
+    return {start: w.start || '22:00', end: w.end || '06:30'};
+  }
+  function lisbonParts(d) {
+    const parts = new Intl.DateTimeFormat('en-GB', {timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit'}).formatToParts(d || new Date());
+    const g = t => (parts.find(p => p.type === t) || {}).value;
+    return {h: +g('hour'), m: +g('minute'), date: g('year') + '-' + g('month') + '-' + g('day')};
+  }
+  function hmToMin(s) { const p = String(s || '').split(':'); return (+p[0]) * 60 + (+p[1] || 0); }
+  function renderNightStatus(j) {
+    const el = $('night-status'); if (!el) return;
+    const {start, end} = nightWindow(j);
+    const n = lisbonParts();
+    const cur = n.h * 60 + n.m, a = hmToMin(start), b = hmToMin(end);
+    const inNight = a > b ? (cur >= a || cur < b) : (cur >= a && cur < b);
+    el.textContent = inNight ? ('Noite PAPER a decorrer · ' + start + '–' + end + ' Lisboa') : ('Próxima noite ' + start + '–' + end + ' Lisboa');
+    el.hidden = false;
+  }
+  function renderNights(j) {
+    const box = $('nights-box'), hh = $('nights-h'); if (!box) return;
+    const {start, end} = nightWindow(j);
+    const nights = (j && j.nights) || [];
+    if (hh) hh.hidden = false;
+    box.hidden = false;
+    let html;
+    if (!nights.length) {
+      html = `<div class="day-row nights-empty" id="nights-empty">${esc((j && j.emptyText) || ('Primeira noite hoje ' + start + '–' + end))}</div>`;
+    } else {
+      html = nights.map(d => {
+        const n = Number(d.trades || 0), word = n === 1 ? 'trade' : 'trades';
+        return `<div class="day-row"><b>${esc(d.label || d.date || '')}</b>
+      <span class="xp-v">${xpMoney(d.pnl)}</span>
+      <div class="day-sub small"><span class="ter">${n0(n)} ${word}</span></div></div>`;
+      }).join('');
+    }
+    if (box.dataset.k !== html) { box.dataset.k = html; box.innerHTML = html; }
+  }
+  async function pollOvernight() {
+    let j = null;
+    try {
+      if (D) {
+        const r = await fetch(`${BASE}/d/${D}/overnight.json?t=${Date.now()}`, {cache: 'no-store', referrerPolicy: 'no-referrer'});
+        if (r.ok) j = await r.json();
+      }
+    } catch (e) { /* bucket file is optional */ }
+    if (!j) {
+      try {
+        const r = await fetch('overnight.json?t=' + Date.now(), {cache: 'no-store', referrerPolicy: 'no-referrer'});
+        if (r.ok) j = await r.json();
+      } catch (e) { /* keep last */ }
+    }
+    if (j) cache.overnight = j;
+    renderNightStatus(cache.overnight || j);
+    renderNights(cache.overnight || j || {});
+    setTimeout(pollOvernight, STATE_S * 1000);
   }
   async function loadChart() {
     if (trainView()) { drawTrain(trainHome(cache.state)); return; }
@@ -287,17 +345,13 @@
     const L = !demoOn() && s.live && s.live.bots ? s.live : null;
     const $b = $('balance'); $b.classList.toggle('red', (s.pnl_usd != null ? s.pnl_usd : (s.balance || 0) - (s.night_start || 0)) < 0);
     $('pnl-since').textContent = s.nightStartAt ? 'desde as ' + hm(s.nightStartAt) : '';
-    renderExplore(demoOn() ? null : s.explore);
-    const H = trainHome(s);
-    renderViewSw(s, H); renderDays(H);
-    if (H && !viewMain) renderTrainHome(s, H); else $('ranges').hidden = false;
-    if (L) { renderLive(s, L); if (H && !viewMain) lastTradeLine(H.lastTrade, s); return; }
-    lastTradeLine(H && !viewMain ? H.lastTrade : null, s);
+    if ($('ranges')) $('ranges').hidden = false;
+    if (cache.overnight) { renderNightStatus(cache.overnight); renderNights(cache.overnight); }
+    if (L) { renderLive(s, L); return; }
+    lastTradeLine(null, s);
     const running = ORDER.filter(a => (s.agents || {})[a] && s.agents[a].running).length;
-    $('agents-running').textContent = running; $('agents-running').classList.remove('skel-i');
-    const hot = demoOn() && DEMO.step ? DEMO.step.agent : null;
+    if ($('agents-running')) { $('agents-running').textContent = String(running); $('agents-running').classList.remove('skel-i'); }
     liveRows = null;
-    $('ag-rows').innerHTML = ORDER.map(a => agRow(a, (s.cards || {})[a] || {}, s, hot)).join('');
   }
 
   // ---------- PISTA DE TREINO (state.explore, Kayke t308u): separate PAPER-only lane, own numbers only ----------
@@ -366,31 +420,11 @@
     liveEpoch = L.epoch || (Date.now() / 1000);
     lastTradeLine(L.lastTrade, s);
     const order = (L.order || ORDER).filter(a => L.bots[a]);
-    $('agents-running').textContent = `${L.running}/${order.length}`; $('agents-running').classList.remove('skel-i');
-    const box = $('ag-rows');
-    if (!liveRows || liveRows.join() !== order.join()) {
-      liveRows = order.slice();
-      box.innerHTML = order.map(a => `<button class="ag-row live" style="--ac:${AC[a]}" data-a="${a}" data-go="agents" data-anchor="ag-${a}">
-        <span class="ag-ico-w">${icon(a)}<i class="ag-spin"></i></span>
-        <span class="ag-mid"><span class="ag-nm"><i class="hb"></i>${esc(NAMES[a])}<span class="ag-badge"></span><span class="ag-off ter small"></span></span>
-        <span class="ag-ln"><span class="ag-tx"></span></span></span>
-        <span class="ag-val num"></span><i class="ag-load"></i></button>`).join('');
+    if ($('agents-running')) {
+      $('agents-running').textContent = `${L.running}/${order.length}`;
+      $('agents-running').classList.remove('skel-i');
     }
-    for (const a of order) {
-      const b = L.bots[a], row = box.querySelector(`[data-a="${a}"]`); if (!row) continue;
-      const age = b.lastTs ? liveEpoch - b.lastTs : null;
-      const on = b.running && !b.paused;
-      const hot = on && ((age != null && age >= -2 && age < HOT_S) || (a === 'risk' && b.guarding > 0));
-      row.classList.toggle('hot', hot); row.classList.toggle('on', on); row.classList.toggle('off', !on);
-      row.querySelector('.hb').className = 'hb ' + (b.paused ? 'paused' : b.running ? 'on' : '');
-      row.querySelector('.ag-badge').textContent = hot ? BADGE[a] : '';
-      row.querySelector('.ag-off').textContent = b.paused ? '· pausado' : b.running ? '' : '· parado (sem sinal)';
-      const tx = `${b.coin ? `<b>${esc(b.coin)}</b> ` : ''}<span class="${b.tone === 'red' ? 'red' : b.tone === 'green' ? 'green' : b.tone === 'blue' ? 'ac' : ''}">${esc(b.text || '')}</span>`;
-      const t = row.querySelector('.ag-tx'); if (t.dataset.k !== tx) { t.dataset.k = tx; t.innerHTML = tx; flash(t); }
-      const mh = metricHtml(a, b), m = row.querySelector('.ag-val');
-      if (m.dataset.k !== mh) { const first = !m.dataset.k; m.dataset.k = mh; m.innerHTML = mh; if (!first) flash(m); }
-      m.className = 'ag-val num ' + (a === 'risk' && Number(b.metric || 0) > 0 ? 'red' : a === 'analyst' && b.tone ? b.tone : '');
-    }
+    liveRows = order.slice();
     renderFeed(L.feed || []);
   }
   function flash(el) { if (RM()) return; el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
@@ -411,6 +445,7 @@
   }
   function renderFeed(feed) {
     const box = $('home-activity');
+    if (!box) { feedShown = new Set((feed || []).map(e => e.id)); return; }
     if (!feed.length) { box.innerHTML = '<div class="empty-row">Ainda sem atividade</div>'; feedShown = new Set(); return; }
     profitCheck('feed', feed.filter(e => (e.kind === 'sold' || e.kind === 'partial') && (e.usd || 0) > 0).map(e => e.id));
     if (!feedShown) {                       // first look: show the newest rows, no animation
@@ -541,7 +576,8 @@
   }
   function renderHomeActivity(a) {
     const rows = (a && a.rows) || [];
-    $('trades-n').textContent = rows.filter(r => TRADE.includes(r.kind)).length;
+    if ($('trades-n')) $('trades-n').textContent = rows.filter(r => TRADE.includes(r.kind)).length;
+    if (!$('home-activity')) return;
     if (feedShown && cache.state && cache.state.live && !demoOn()) { profitCheck('act', rows.filter(r => r.kind === 'sold' && /^\+/.test(r.value || '')).map(r => 'a:' + (r.mint || '') + ':' + r.id + ':' + r.title)); return; }
     $('home-activity').innerHTML = rows.length ? rows.slice(0, 6).map(actRow).join('') : `<div class="empty-row">${esc((a && a.empty) || 'No trades yet')}</div>`;
     profitCheck('act', rows.filter(r => r.kind === 'sold' && /^\+/.test(r.value || '')).map(r => 'a:' + (r.mint || '') + ':' + r.id + ':' + r.title));
@@ -807,8 +843,8 @@
       Array.from({length: n}, () => '<div class="skel-block" style="height:64px;margin-top:12px"></div>').join('');
   }
   function loadingLayout() {
-    $('ag-rows').innerHTML = Array.from({length: 5}, () => '<div class="ag-row skel-block"></div>').join('');
-    $('home-activity').innerHTML = Array.from({length: 3}, () => '<div class="item"><span class="ico skel-block"></span><span class="mid"><div class="skel-i" style="width:55%">x</div><div class="skel-i" style="width:35%;margin-top:4px">x</div></span></div>').join('');
+    if ($('ag-rows')) $('ag-rows').innerHTML = Array.from({length: 5}, () => '<div class="ag-row skel-block"></div>').join('');
+    if ($('home-activity')) $('home-activity').innerHTML = Array.from({length: 3}, () => '<div class="item"><span class="ico skel-block"></span><span class="mid"><div class="skel-i" style="width:55%">x</div><div class="skel-i" style="width:35%;margin-top:4px">x</div></span></div>').join('');
     $('agents-list').innerHTML = skelBlocks(5).replace(/height:64px/g, 'height:180px');
     $('activity-list').innerHTML = Array.from({length: 6}, () => '<div class="item"><span class="ico skel-block"></span><span class="mid"><div class="skel-i" style="width:55%">x</div></span></div>').join('');
     $('account-body').innerHTML = skelBlocks(5);
@@ -820,7 +856,7 @@
     if (!D) return;
     const v = visible(), top = stack[stack.length - 1];
     try {
-      if (v === 'tab-home') { if (cache.state) renderState(cache.state); await loadChart(); renderHomeActivity(await tryGet('activity')); homeAlert(); }
+      if (v === 'tab-home') { if (cache.state) renderState(cache.state); await loadChart(); homeAlert(); }
       else if (v === 'tab-agents') await renderAgents();
       else if (v === 'tab-activity') await renderActivity(false);
       else if (v === 'tab-account') await renderAccount();
@@ -910,6 +946,7 @@
     return s < 60 ? Math.round(s) + 's' : s < 3600 ? Math.round(s / 60) + ' min' : Math.round(s / 3600) + ' h'; };
   function renderCopy(j) {
     const sec = $('copy-sec');
+    if (!sec) return;
     if (!j || j.active !== true) { sec.hidden = true; return; }
     sec.hidden = false;
     const fresh = j.running && Math.abs(Date.now() / 1000 - Number(j.epoch || 0)) < 120;
@@ -1067,10 +1104,11 @@
       if (tm) localStorage.setItem('desk_t', tm[1]);
       if (mm) { localStorage.setItem('desk_d', mm[1]); location.reload(); } else toast('That is not a desk link'); });
     loadingLayout(); $('balance').textContent = '—'; $('balance').classList.remove('skel');
-    $('today').textContent = ''; $('mult').hidden = true; $('agents-running').textContent = '—'; $('agents-running').classList.remove('skel-i');
-    $('home-activity').innerHTML = '<div class="empty-row">Open your desk link once on this device</div>';
-    $('ag-rows').innerHTML = ''; return;
+    $('today').textContent = ''; $('mult').hidden = true; if ($('agents-running')) { $('agents-running').textContent = '—'; $('agents-running').classList.remove('skel-i'); }
+    if ($('nights-box')) renderNights({});
+    if ($('home-activity')) $('home-activity').innerHTML = '<div class="empty-row">Open your desk link once on this device</div>';
+    if ($('ag-rows')) $('ag-rows').innerHTML = ''; return;
   }
   loadingLayout();
-  pollState().then(() => { refreshScreen(); tryGet('index').catch(() => {}); pollEvents(); pollDemo(); pollCopy(); });
+  pollState().then(() => { refreshScreen(); tryGet('index').catch(() => {}); pollEvents(); pollDemo(); pollOvernight(); });
 })();

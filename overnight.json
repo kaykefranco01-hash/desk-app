@@ -1,0 +1,9 @@
+{
+  "nights": [],
+  "window": {
+    "start": "22:00",
+    "end": "06:30"
+  },
+  "empty": true,
+  "emptyText": "Primeira noite hoje 22:00–06:30"
+}

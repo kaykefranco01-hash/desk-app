@@ -35,38 +35,19 @@
       <div id="balance" class="balance num skel" aria-live="polite">$000.00</div>
     </div>
     <div class="sub-row"><span id="today" class="num today skel-i">▲ $0.00 (0.00%)</span><span id="mult" class="pill-mult num skel-i">1.00x</span><span id="pnl-since" class="pnl-since ter small"></span></div>
-    <div id="view-sw" class="view-sw small" hidden></div>
+    <div id="night-status" class="night-status" aria-live="polite">Noite PAPER · 22:00–06:30 Lisboa</div>
     <div id="open-pos" class="open-pos" hidden></div>
     <div class="chart-wrap" id="chart-wrap"><canvas id="chart" aria-label="Gráfico do saldo"></canvas><i id="chart-head" class="chart-head" hidden></i>
       <div id="chart-empty" class="chart-empty" hidden>Waiting for the first trade</div></div>
     <div class="ranges" id="ranges"><button class="on" data-r="LIVE"><i class="live-dot"></i>LIVE</button><button data-r="1H">1H</button><button data-r="4H">4H</button><button data-r="1D">1D</button><button data-r="1W">1W</button><button data-r="ALL">ALL</button></div>
-    <h2 class="h2 row-h" id="days-h" hidden>Treino por dia <span class="ter small">08:00–08:00 Lisboa</span></h2>
-    <div id="days-box" class="days-box" hidden aria-live="polite"></div>
-    <h2 class="h2 row-h ag-h">Bots <span class="ag-run green"><span id="agents-running" class="num skel-i">6</span> a correr</span></h2>
-    <div id="ag-rows" class="ag-rows" aria-label="Bots"></div>
-    <h2 class="h2 row-h">Atividade <button class="see-all green" data-go="activity">Ver tudo <span id="trades-n" class="num" hidden>0</span>›</button></h2>
-    <div id="home-activity" class="list act-list feed-list" aria-live="polite"></div>
-    <!-- Pista de treino (Kayke t308u): the separate PAPER-only explore lane, from state.json "explore". Never mixed into the desk numbers above. -->
-    <h2 class="h2 row-h" id="xp-h" hidden>Pista de treino (PAPER) <span id="xp-on" class="xp-on ter small"></span></h2>
-    <div id="xp-box" class="xp-box" hidden aria-live="polite"></div>
-    <h2 class="h2 row-h">Carteira do bot</h2>
-    <div class="gt-run wallet-card">
-      <div id="run-budget" class="run-bal">$0.00 · 0 SOL</div>
-      <div id="run-wallet" class="run-line ter">Carteira do bot: —</div>
-      <div id="run-pilot-size" class="run-line ter"></div>
-      <div class="addr-box panel-addr">
-        <code id="run-addr" class="addr-val"></code>
-        <button type="button" class="btn-copy" id="run-copy">Copiar</button>
-      </div>
-      <p class="run-note">Manda SOL para este endereço. O valor aparece aqui sozinho.</p>
-      <div id="mode-hint" class="run-line" hidden></div>
-    </div>
-    <!-- COPY-PAPER: separate virtual copy-trade book (copy.json). Never mixed with the main balance or activity. -->
-    <section id="copy-sec" class="copy-sec" hidden aria-label="COPY-PAPER">
-      <h2 class="h2 row-h">Copy trading <span class="pill-copy">COPY-PAPER</span></h2>
-      <div id="copy-body" class="copy-card"></div>
-    </section>
-    <div class="meta ter small">Última atualização <span id="updated" class="num">—</span> · dados reais da mesa, sem simulação</div>
+    <h2 class="h2 row-h" id="nights-h">Noites Overnight Desk</h2>
+    <div id="nights-box" class="days-box" aria-live="polite"></div>
+    <button type="button" class="bots-compact" id="bots-compact" data-go="agents" aria-label="Bots">
+      <span class="bots-k">Bots</span>
+      <span class="ag-run green"><span id="agents-running" class="num skel-i">—</span> a correr</span>
+      <span class="chev">›</span>
+    </button>
+    <div class="meta ter small">Última atualização <span id="updated" class="num">—</span> · PAPER Overnight Desk</div>
   </section>
   <!-- AGENTS -->
   <section id="tab-agents" class="tab" hidden>
@@ -85,6 +66,17 @@
   <section id="tab-account" class="tab" hidden>
     <header class="nav"><div class="title">Account</div></header>
     <div class="err-slot"></div>
+    <details id="wallet-sec" class="wallet-fold">
+      <summary>Carteira do bot</summary>
+      <div class="gt-run wallet-card">
+        <div id="run-budget" class="run-bal">$0.00 · 0 SOL</div>
+        <div id="run-wallet" class="run-line ter">Carteira do bot: —</div>
+        <div class="addr-box panel-addr">
+          <code id="run-addr" class="addr-val"></code>
+          <button type="button" class="btn-copy" id="run-copy">Copiar</button>
+        </div>
+      </div>
+    </details>
     <div id="account-body"></div>
   </section>
   <!-- PUSHED SCREENS -->

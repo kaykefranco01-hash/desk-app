@@ -500,3 +500,46 @@ body.demo .gt-top{margin-top:0}
 .wallet-fold summary::after{content:"›";color:var(--ter);font-size:18px;transform:rotate(90deg)}
 .wallet-fold[open] summary{border-bottom:1px solid rgba(255,255,255,.06)}
 .wallet-fold .wallet-card{box-shadow:none;background:transparent}
+
+/* Votes 3/4 strip on Início (same chips as before; pista de treino lane stays off the home tab) */
+.xp-votes-strip{margin:8px 0 12px;padding:10px 12px;background:var(--card);border-radius:14px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}
+.xp-votes-strip .xp-votes{margin:0}
+
+/* Início t372u/t374u: fomo header, PAPER tag, live screen card, bot rows */
+.fh{display:flex;align-items:center;gap:8px;min-height:44px;margin-top:2px}
+.fh-brand{flex:1;min-width:0;font-size:17px;font-weight:600}
+.fh-brand b{font-weight:700}
+.lh-clock{font-size:15px;color:var(--sec);font-variant-numeric:tabular-nums}
+.pill-paper-tag{flex:none;margin-left:8px;align-self:center}
+.bal-row{align-items:flex-start}
+#tab-home .balance{font-size:64px;letter-spacing:-2px}
+#tab-home .pill-mult{font-weight:800;border-radius:8px}
+.live-h{margin:18px 0 8px}
+.live-h .h2{margin:0}
+.live-link{font-size:14px;font-weight:600}
+.live-card{position:relative;border-radius:18px;overflow:hidden;background:#0d0d0f;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);min-height:180px;margin-bottom:8px}
+.live-frame-wrap{position:relative;min-height:180px;background:#0d0d0f}
+#live-frame{display:block;width:100%;height:auto;max-height:280px;object-fit:cover;object-position:top center;background:#0d0d0f}
+#live-frame[hidden]{display:none!important}
+.live-ph{min-height:180px;display:flex;align-items:center;justify-content:center;text-align:center;padding:36px 20px;color:var(--sec);font-size:15px;font-weight:500}
+.live-ov{position:absolute;top:10px;left:10px;background:rgba(0,0,0,.62);color:#fff;font-size:12px;font-weight:600;padding:5px 9px;border-radius:999px;display:flex;align-items:center;gap:6px;z-index:1;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.live-ov .live-dot,.live-ov i.live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);display:inline-block}
+.live-badge{position:absolute;top:10px;right:10px;background:rgba(48,209,88,.18);color:var(--green);font-size:12px;font-weight:700;padding:5px 9px;border-radius:999px;z-index:1}
+.live-cap{position:absolute;left:0;right:0;bottom:0;padding:10px 12px 12px;background:linear-gradient(180deg,transparent,rgba(0,0,0,.82));font-size:13px;font-weight:600;z-index:1}
+.ag-h .ag-run{font-size:15px;font-weight:600;color:var(--green)}
+.ag-rows{display:flex;flex-direction:column;gap:8px}
+.bot-row{display:flex;align-items:center;gap:12px;width:100%;min-height:64px;padding:10px 12px;border-radius:16px;background:var(--card);text-align:left;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}
+.bot-ava{position:relative;width:44px;height:44px;flex:none}
+.bot-ring{position:absolute;inset:0;width:44px;height:44px;transform:rotate(-90deg)}
+.bot-ring-bg{stroke:rgba(255,255,255,.1)}
+.bot-ring-fg{stroke:var(--ac,#30d158);transition:stroke-dashoffset .4s}
+.bot-ava .ag-ico{position:absolute;inset:7px;width:30px;height:30px;border-radius:50%}
+.bot-ava .ag-ico svg{width:18px;height:18px}
+.bot-mid{flex:1;min-width:0}
+.bot-nm{display:flex;align-items:center;gap:6px;font-weight:700;font-size:16px;line-height:1.2}
+.bot-ln{display:block;font-size:13px;color:var(--sec);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.bot-ln b{color:var(--text);font-weight:600}
+.bot-val{flex:none;text-align:right;font-weight:700;font-size:15px;white-space:nowrap}
+.bot-val small{font-size:12px;color:var(--sec);font-weight:600;margin-left:2px}
+.bot-row.off{opacity:.7}
+.bot-row.hot{box-shadow:inset 0 0 0 1.5px var(--ac),0 0 14px -6px var(--ac)}

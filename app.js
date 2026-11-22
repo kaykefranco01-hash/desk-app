@@ -31,6 +31,7 @@
 
   // ---------- formatting ----------
   const usd = (v, dp = 2) => v == null || isNaN(v) ? '—' : (v < 0 ? '-$' : '$') + Math.abs(Number(v)).toLocaleString('en-US', {minimumFractionDigits: dp, maximumFractionDigits: dp});
+  const usdHero = (v) => v == null || isNaN(v) ? '—' : (v < 0 ? '-$ ' : '$ ') + Math.abs(Number(v)).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
   const usdK = v => { if (v == null || isNaN(v)) return '—'; const a = Math.abs(v);
     return a >= 1e9 ? '$' + (v / 1e9).toFixed(2) + 'B' : a >= 1e6 ? '$' + (v / 1e6).toFixed(2) + 'M' : a >= 1e3 ? '$' + (v / 1e3).toFixed(1) + 'K' : usd(v); };
   const pct = v => v == null || isNaN(v) ? '—' : (v >= 0 ? '+' : '') + Number(v).toFixed(2) + '%';
@@ -312,7 +313,7 @@
     const reveal = fresh || drawnRange !== range; drawnRange = range;
     window.DeskChart.line($('chart'), c, {reveal, head: $('chart-head')});
     if (range === 'LIVE') profitCheck('chart', (c.marks || []).filter(m => m.kind !== 'bought' && Number(m.usd != null ? m.usd : /^\+/.test(m.label || '') ? 1 : -1) > 0).map(m => 'a:' + (m.mint || '') + ':m' + Math.round(m.ts)));
-    $('chart-empty').textContent = c.empty || 'Waiting for the first trade';
+    $('chart-empty').textContent = c.empty || 'À espera do primeiro trade';
     $('chart-empty').hidden = !c.empty && (c.points || []).length > 1;
   }
 
@@ -322,16 +323,16 @@
     const t = $('today'); t.classList.remove('skel-i');
     t.textContent = `${up ? '▲' : '▼'} ${pnl == null ? '—' : usd(Math.abs(pnl))} (${pctV == null ? '—' : Math.abs(Number(pctV)).toFixed(2) + '%'})`;
     t.className = 'num today ' + (up ? 'green' : 'red');
-    const m = $('mult'); m.classList.remove('skel-i'); m.textContent = Number(mult || 1).toFixed(2) + 'x'; m.classList.toggle('down', !up);
+    const m = $('mult'); m.classList.remove('skel-i'); m.textContent = Number(mult || 1).toFixed(2) + '×'; m.classList.toggle('down', !up);
   }
   function renderState(s) {
-    if (!(trainHome(s) && !viewMain)) odometer($('balance'), usd(s.balance));
+    odometer($('balance'), usdHero(s.balance));
     const mode = s.mode === 'DEMO' ? 'DEMO' : s.mode === 'LIVE' ? 'LIVE' : 'PAPER';
     const fresh = Math.abs(Date.now() - new Date(s.ts).getTime()) < STATE_S * 4000;
     const mp = $('paper');
     const r = runOf(s);
     const can = mode === 'DEMO' ? false : (mode === 'LIVE' ? true : r.canToggle !== false);
-    mp.className = 'mode-pill ' + mode.toLowerCase() + (fresh ? '' : ' stale');
+    mp.className = 'mode-pill pill-paper-tag ' + mode.toLowerCase() + (fresh ? '' : ' stale');
     mp.disabled = !can && mode !== 'LIVE';
     mp.setAttribute('aria-disabled', can ? 'false' : 'true');
     if (mode === 'DEMO') mp.setAttribute('aria-disabled', 'true');
@@ -352,6 +353,10 @@
     const running = ORDER.filter(a => (s.agents || {})[a] && s.agents[a].running).length;
     if ($('agents-running')) { $('agents-running').textContent = String(running); $('agents-running').classList.remove('skel-i'); }
     liveRows = null;
+    if ($('ag-rows')) {
+      const idle = {running: false, paused: false, text: 'à espera', metric: null, lastTs: 0};
+      $('ag-rows').innerHTML = ORDER.map(a => botRowHtml(a, (s.agents && s.agents[a]) ? {running: !!s.agents[a].running, paused: false, text: 'à espera', metric: null, lastTs: 0} : idle)).join('');
+    }
   }
 
   // ---------- PISTA DE TREINO (state.explore, Kayke t308u): separate PAPER-only lane, own numbers only ----------
@@ -363,6 +368,20 @@
   function xpVotes(v) {
     if (!v || !v.bots) return '';
     return `<div class="xp-votes small">${Object.entries(v.bots).map(([b, x]) => `<span class="xp-vote ${x.yes ? 'green' : 'red'}" title="${esc(x.why || '')}">${esc(XP_BOT[b] || b)} ${x.yes ? '✓' : '✗'}</span>`).join(' ')} <span class="ter">${n0(v.yes || 0)}/4</span></div>`;
+  }
+  function latestVotes(x) {
+    if (!x) return null;
+    const rows = (x.openPositions || []).concat(x.closedTrades || []);
+    for (const r of rows) { if (r && r.votes && r.votes.bots) return r.votes; }
+    return null;
+  }
+  function renderVotesStrip(x) {
+    const box = $('xp-votes-strip'); if (!box) return;
+    const votes = latestVotes(x);
+    if (!votes) { box.hidden = true; box.innerHTML = ''; box.dataset.k = ''; return; }
+    const html = xpVotes(votes);
+    box.hidden = false;
+    if (box.dataset.k !== html) { box.dataset.k = html; box.innerHTML = html; }
   }
   function renderExplore(x) {
     const h = $('xp-h'), box = $('xp-box');
@@ -410,6 +429,26 @@
     if (el.dataset.k !== txt) { el.dataset.k = txt; el.innerHTML = `<span class="lt-in">${txt}</span>`; }
     el.hidden = false;
   }
+  const RING = 2 * Math.PI * 15;
+  function ringOffset(a, b) {
+    if (a === 'analyst' && b && b.metric != null && !isNaN(Number(b.metric))) {
+      const p = Math.max(0, Math.min(100, Number(b.metric))) / 100;
+      return RING * (1 - p);
+    }
+    if (b && b.running && !b.paused) return 0;
+    return RING * 0.92;
+  }
+  function botRowHtml(a, b) {
+    b = b || {};
+    const off = ringOffset(a, b);
+    const idle = b.paused ? 'pausado' : (b.running ? 'à espera' : 'parado (sem sinal)');
+    const tx = `${b.coin ? `<b>${esc(b.coin)}</b> ` : ''}${esc(b.text || idle)}`;
+    return `<button class="bot-row${b.running && !b.paused ? ' on' : ' off'}" style="--ac:${AC[a]}" data-a="${a}" data-go="agents" data-anchor="ag-${a}">
+      <span class="bot-ava"><svg class="bot-ring" viewBox="0 0 36 36" aria-hidden="true"><circle class="bot-ring-bg" cx="18" cy="18" r="15" fill="none" stroke-width="2.4"/><circle class="bot-ring-fg" cx="18" cy="18" r="15" fill="none" stroke-width="2.4" stroke-dasharray="${RING.toFixed(2)}" stroke-dashoffset="${off.toFixed(2)}" pathLength="${RING.toFixed(2)}"/></svg>${icon(a)}</span>
+      <span class="bot-mid"><span class="bot-nm"><i class="hb ${b.paused ? 'paused' : b.running ? 'on' : ''}"></i>${esc(NAMES[a] || a)}</span>
+      <span class="bot-ln">${tx}</span></span>
+      <span class="bot-val num">${metricHtml(a, b)}</span></button>`;
+  }
   function metricHtml(a, b) {
     const v = b.metric;
     if (a === 'analyst') return v == null ? '<span class="ter">—</span>' : `score ${n0(v)}`;
@@ -424,7 +463,31 @@
       $('agents-running').textContent = `${L.running}/${order.length}`;
       $('agents-running').classList.remove('skel-i');
     }
-    liveRows = order.slice();
+    const box = $('ag-rows');
+    if (box) {
+      if (!liveRows || liveRows.join() !== order.join()) {
+        liveRows = order.slice();
+        box.innerHTML = order.map(a => botRowHtml(a, L.bots[a] || {})).join('');
+      }
+      for (const a of order) {
+        const b = L.bots[a], row = box.querySelector(`[data-a="${a}"]`); if (!row) continue;
+        const age = b.lastTs ? liveEpoch - b.lastTs : null;
+        const on = b.running && !b.paused;
+        const hot = on && ((age != null && age >= -2 && age < HOT_S) || (a === 'risk' && b.guarding > 0));
+        row.classList.toggle('hot', hot); row.classList.toggle('on', on); row.classList.toggle('off', !on);
+        const hb = row.querySelector('.hb'); if (hb) hb.className = 'hb ' + (b.paused ? 'paused' : b.running ? 'on' : '');
+        const idle = b.paused ? 'pausado' : (b.running ? '' : 'parado (sem sinal)');
+        const tx = `${b.coin ? `<b>${esc(b.coin)}</b> ` : ''}<span class="${b.tone === 'red' ? 'red' : b.tone === 'green' ? 'green' : b.tone === 'blue' ? 'ac' : ''}">${esc(b.text || idle || 'à espera')}</span>`;
+        const el = row.querySelector('.bot-ln'); if (el && el.dataset.k !== tx) { el.dataset.k = tx; el.innerHTML = tx; flash(el); }
+        const mh = metricHtml(a, b), m = row.querySelector('.bot-val');
+        if (m && m.dataset.k !== mh) { const first = !m.dataset.k; m.dataset.k = mh; m.innerHTML = mh; if (!first) flash(m); }
+        if (m) m.className = 'bot-val num ' + (a === 'risk' && Number(b.metric || 0) > 0 ? 'red' : a === 'analyst' && b.tone ? b.tone : '');
+        const fg = row.querySelector('.bot-ring-fg');
+        if (fg) fg.style.strokeDashoffset = String(ringOffset(a, b));
+      }
+    } else {
+      liveRows = order.slice();
+    }
     renderFeed(L.feed || []);
   }
   function flash(el) { if (RM()) return; el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
@@ -446,7 +509,7 @@
   function renderFeed(feed) {
     const box = $('home-activity');
     if (!box) { feedShown = new Set((feed || []).map(e => e.id)); return; }
-    if (!feed.length) { box.innerHTML = '<div class="empty-row">Ainda sem atividade</div>'; feedShown = new Set(); return; }
+    if (!feed.length) { box.innerHTML = '<div class="empty-row">Sem atividade ainda</div>'; feedShown = new Set(); return; }
     profitCheck('feed', feed.filter(e => (e.kind === 'sold' || e.kind === 'partial') && (e.usd || 0) > 0).map(e => e.id));
     if (!feedShown) {                       // first look: show the newest rows, no animation
       feedShown = new Set(feed.map(e => e.id));
@@ -579,7 +642,7 @@
     if ($('trades-n')) $('trades-n').textContent = rows.filter(r => TRADE.includes(r.kind)).length;
     if (!$('home-activity')) return;
     if (feedShown && cache.state && cache.state.live && !demoOn()) { profitCheck('act', rows.filter(r => r.kind === 'sold' && /^\+/.test(r.value || '')).map(r => 'a:' + (r.mint || '') + ':' + r.id + ':' + r.title)); return; }
-    $('home-activity').innerHTML = rows.length ? rows.slice(0, 6).map(actRow).join('') : `<div class="empty-row">${esc((a && a.empty) || 'No trades yet')}</div>`;
+    $('home-activity').innerHTML = rows.length ? rows.slice(0, 6).map(actRow).join('') : `<div class="empty-row">${esc((a && a.empty) || 'Sem atividade ainda')}</div>`;
     profitCheck('act', rows.filter(r => r.kind === 'sold' && /^\+/.test(r.value || '')).map(r => 'a:' + (r.mint || '') + ':' + r.id + ':' + r.title));
   }
   // ---------- confetti when a trade closes in profit (never on first load, never with reduced motion) ----------
@@ -843,7 +906,7 @@
       Array.from({length: n}, () => '<div class="skel-block" style="height:64px;margin-top:12px"></div>').join('');
   }
   function loadingLayout() {
-    if ($('ag-rows')) $('ag-rows').innerHTML = Array.from({length: 5}, () => '<div class="ag-row skel-block"></div>').join('');
+    if ($('ag-rows')) $('ag-rows').innerHTML = Array.from({length: 5}, () => '<div class="bot-row skel-block"></div>').join('');
     if ($('home-activity')) $('home-activity').innerHTML = Array.from({length: 3}, () => '<div class="item"><span class="ico skel-block"></span><span class="mid"><div class="skel-i" style="width:55%">x</div><div class="skel-i" style="width:35%;margin-top:4px">x</div></span></div>').join('');
     $('agents-list').innerHTML = skelBlocks(5).replace(/height:64px/g, 'height:180px');
     $('activity-list').innerHTML = Array.from({length: 6}, () => '<div class="item"><span class="ico skel-block"></span><span class="mid"><div class="skel-i" style="width:55%">x</div></span></div>').join('');
@@ -856,7 +919,7 @@
     if (!D) return;
     const v = visible(), top = stack[stack.length - 1];
     try {
-      if (v === 'tab-home') { if (cache.state) renderState(cache.state); await loadChart(); homeAlert(); }
+      if (v === 'tab-home') { if (cache.state) renderState(cache.state); await loadChart(); renderHomeActivity(await tryGet('activity')); homeAlert(); }
       else if (v === 'tab-agents') await renderAgents();
       else if (v === 'tab-activity') await renderActivity(false);
       else if (v === 'tab-account') await renderAccount();
@@ -1090,6 +1153,47 @@
     modeErr('Não consegui enviar o pedido. Se o piloto e a carteira estiverem prontos, envia no Telegram ao bot da mesa:  ' + cmd);
   }
 
+
+  // Live screen (t374u): public frame + caption published by ops/live_screen_capture.py. Never a secret path.
+  const LIVE_MAX_AGE_S = 15 * 60;
+  const LIVE_CAPTION_URL = 'https://raw.githubusercontent.com/kaykefranco01-hash/desk-app/live-screen/live/caption.json';
+  const LIVE_FRAME_URL = 'https://raw.githubusercontent.com/kaykefranco01-hash/desk-app/live-screen/live/frame.jpg';
+  function agoPt(s) {
+    if (s < 45) return 'agora';
+    if (s < 3600) return 'há ' + Math.max(1, Math.round(s / 60)) + ' min';
+    return 'há ' + Math.round(s / 3600) + ' h';
+  }
+  function showLivePlaceholder() {
+    const img = $('live-frame'), ph = $('live-ph'), cap = $('live-cap'), badge = $('live-badge');
+    if (img) { img.removeAttribute('src'); img.hidden = true; }
+    if (ph) ph.hidden = false;
+    if (cap) cap.textContent = '';
+    if (badge) { badge.hidden = true; badge.textContent = ''; }
+  }
+  async function pollLiveScreen() {
+    const img = $('live-frame'), ph = $('live-ph'), cap = $('live-cap'), badge = $('live-badge');
+    if (!img || !ph) { setTimeout(pollLiveScreen, 30000); return; }
+    let shown = false;
+    try {
+      const r = await fetch(LIVE_CAPTION_URL + '?t=' + Date.now(), {cache: 'no-store', referrerPolicy: 'no-referrer'});
+      const j = r.ok ? await r.json() : null;
+      const age = j && j.epoch != null ? (Date.now() / 1000 - Number(j.epoch)) : Infinity;
+      if (j && isFinite(age) && age <= LIVE_MAX_AGE_S) {
+        const src = LIVE_FRAME_URL + '?t=' + Math.floor(Number(j.epoch));
+        img.onload = () => { img.hidden = false; ph.hidden = true; };
+        img.onerror = () => showLivePlaceholder();
+        if (img.src !== src) img.src = src; else { img.hidden = false; ph.hidden = true; }
+        if (cap) cap.textContent = [j.caption || '', agoPt(age)].filter(Boolean).join(' · ');
+        if (badge) {
+          if (j.badge) { badge.hidden = false; badge.textContent = j.badge; }
+          else { badge.hidden = true; badge.textContent = ''; }
+        }
+        shown = true;
+      }
+    } catch (e) { /* placeholder */ }
+    if (!shown) showLivePlaceholder();
+    setTimeout(pollLiveScreen, 30000);
+  }
   // ---------- start ----------
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
   renderRanges();
@@ -1110,5 +1214,5 @@
     if ($('ag-rows')) $('ag-rows').innerHTML = ''; return;
   }
   loadingLayout();
-  pollState().then(() => { refreshScreen(); tryGet('index').catch(() => {}); pollEvents(); pollDemo(); pollOvernight(); });
+  pollState().then(() => { refreshScreen(); tryGet('index').catch(() => {}); pollEvents(); pollDemo(); pollOvernight(); pollLiveScreen(); });
 })();

@@ -15,6 +15,40 @@
   const RM = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
   const safe = u => (typeof u === 'string' && /^https:\/\/[^\s"'<>]+$/.test(u)) ? u : null;   // pass-through only, never built here
+  let TOKEN_IMG = {};
+  const TOKEN_IMG_REMOTE = 'https://raw.githubusercontent.com/kaykefranco01-hash/desk-app/live-screen/live/token-images.json';
+  function rememberImages(j) {
+    const map = (j && j.images && typeof j.images === 'object') ? j.images : (j && typeof j === 'object' ? j : {});
+    for (const [k, v] of Object.entries(map)) { if (safe(v)) TOKEN_IMG[k] = v; }
+  }
+  async function pollTokenImages() {
+    for (const u of ['token-images.json', TOKEN_IMG_REMOTE]) {
+      try {
+        const r = await fetch(u + (u.includes('?') ? '&' : '?') + 't=' + Date.now(), {cache: 'no-store', referrerPolicy: 'no-referrer'});
+        if (r.ok) rememberImages(await r.json());
+      } catch (e) { /* keep whatever we have */ }
+    }
+  }
+  const imgFor = (mint, fallback) => safe(fallback) || (mint && safe(TOKEN_IMG[mint])) || null;
+  function clock12(iso) {
+    if (!iso && iso !== 0) return '';
+    const d = (typeof iso === 'number') ? new Date(iso * 1000) : new Date(iso);
+    if (isNaN(d)) return '';
+    return d.toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit', timeZone: TZ});
+  }
+  const BADGE_BUY = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 2.2v7.6M3.2 6.8L6 9.6l2.8-2.8" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const BADGE_SELL = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 9.8V2.2M3.2 5.2L6 2.4l2.8 2.8" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const BADGE_RADAR = '<svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="2.1" fill="none" stroke="#fff" stroke-width="1.3"/><circle cx="6" cy="6" r="3.8" fill="none" stroke="#fff" stroke-width="1.1" opacity=".85"/><path d="M6 6L9.6 3.2" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/><circle cx="6" cy="6" r="0.8" fill="#fff"/></svg>';
+  function badgeKind(kind) {
+    const k = String(kind || '').toLowerCase();
+    if (['bought', 'buy', 'entrada', 'signal'].includes(k)) return ['#0a84ff', BADGE_BUY];
+    if (['sold', 'sell', 'stopped', 'partial', 'saída', 'exit'].includes(k)) return ['#30d158', BADGE_SELL];
+    return ['#636366', BADGE_RADAR];
+  }
+  function actBadge(kind) {
+    const [col, svg] = badgeKind(kind);
+    return `<i class="act-bd" style="background:${col}">${svg}</i>`;
+  }
   const ORDER = ['scanner', 'auditor', 'analyst', 'executor', 'risk', 'brain', 'discover'];
   const NAMES = {scanner: 'Scanner', auditor: 'Auditor', analyst: 'Analyst', executor: 'Executor', risk: 'Risk', brain: 'Brain', discover: 'Discover'};
   const COLORS = {scanner: '#0a84ff', auditor: '#bf5af2', analyst: '#30d158', executor: '#ff9f0a', risk: '#ff453a', brain: '#5e5ce6'};   // same colours as the Home rows
@@ -442,7 +476,7 @@
     b = b || {};
     const off = ringOffset(a, b);
     const idle = b.paused ? 'pausado' : (b.running ? 'à espera' : 'parado (sem sinal)');
-    const tx = `${b.coin ? `<b>${esc(b.coin)}</b> ` : ''}${esc(b.text || idle)}`;
+    const tx = `${b.coin ? `${av(b.coin, b.image, b.mint, 'xs')}<b>${esc(b.coin)}</b> ` : ''}${esc(b.text || idle)}`;
     return `<button class="bot-row${b.running && !b.paused ? ' on' : ' off'}" style="--ac:${AC[a]}" data-a="${a}" data-go="agents" data-anchor="ag-${a}">
       <span class="bot-ava"><svg class="bot-ring" viewBox="0 0 36 36" aria-hidden="true"><circle class="bot-ring-bg" cx="18" cy="18" r="15" fill="none" stroke-width="2.4"/><circle class="bot-ring-fg" cx="18" cy="18" r="15" fill="none" stroke-width="2.4" stroke-dasharray="${RING.toFixed(2)}" stroke-dashoffset="${off.toFixed(2)}" pathLength="${RING.toFixed(2)}"/></svg>${icon(a)}</span>
       <span class="bot-mid"><span class="bot-nm"><i class="hb ${b.paused ? 'paused' : b.running ? 'on' : ''}"></i>${esc(NAMES[a] || a)}</span>
@@ -477,7 +511,7 @@
         row.classList.toggle('hot', hot); row.classList.toggle('on', on); row.classList.toggle('off', !on);
         const hb = row.querySelector('.hb'); if (hb) hb.className = 'hb ' + (b.paused ? 'paused' : b.running ? 'on' : '');
         const idle = b.paused ? 'pausado' : (b.running ? '' : 'parado (sem sinal)');
-        const tx = `${b.coin ? `<b>${esc(b.coin)}</b> ` : ''}<span class="${b.tone === 'red' ? 'red' : b.tone === 'green' ? 'green' : b.tone === 'blue' ? 'ac' : ''}">${esc(b.text || idle || 'à espera')}</span>`;
+        const tx = `${b.coin ? `${av(b.coin, b.image, b.mint, 'xs')}<b>${esc(b.coin)}</b> ` : ''}<span class="${b.tone === 'red' ? 'red' : b.tone === 'green' ? 'green' : b.tone === 'blue' ? 'ac' : ''}">${esc(b.text || idle || 'à espera')}</span>`;
         const el = row.querySelector('.bot-ln'); if (el && el.dataset.k !== tx) { el.dataset.k = tx; el.innerHTML = tx; flash(el); }
         const mh = metricHtml(a, b), m = row.querySelector('.bot-val');
         if (m && m.dataset.k !== mh) { const first = !m.dataset.k; m.dataset.k = mh; m.innerHTML = mh; if (!first) flash(m); }
@@ -495,16 +529,39 @@
   // Activity feed: new rows slide in at the top, one after another in time order. Each shows its real time.
   const FEED_N = 8, ACTOR_C = {scanner: '#0a84ff', auditor: '#bf5af2', analyst: '#30d158', executor: '#ff9f0a', risk: '#ff453a', brain: '#5e5ce6', discover: '#64d2ff'};
   let feedShown = null, feedQ = [], feedT = 0;
-  const hms2 = e => new Date(e.iso || e.ts * 1000).toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: TZ});
+  const hms2 = e => clock12(e.iso || e.ts);
   function feedRow(e, enter) {
     const trade = ['bought', 'sold', 'stopped', 'partial'].includes(e.kind);
     const attr = trade ? `data-coin="${esc(e.mint)}"` : e.actor === 'auditor' ? `data-audit="${esc(e.mint)}"` : '';
-    const tone = e.tone === 'red' ? 'red' : e.tone === 'green' ? 'green' : e.tone === 'blue' ? 'blue' : 'grey';
-    const val = e.usd != null && trade ? `<span class="fd-v num ${e.kind === 'bought' ? '' : e.usd >= 0 ? 'green' : 'red'}">${e.kind === 'bought' ? usd(e.usd) : (e.usd >= 0 ? '+' : '-') + usd(Math.abs(e.usd)).replace('-', '')}</span>` : '';
     const tag = attr ? 'button' : 'div';
-    return `<${tag} class="fd ${tone}${enter ? ' enter' : ''}" data-id="${esc(e.id)}" ${attr} style="--ac:${ACTOR_C[e.actor] || '#888'}">
-      <span class="fd-tm num">${hms2(e)}</span><span class="fd-ic">${icon(e.actor)}</span>
-      <span class="fd-mid"><span class="fd-t"><b>${esc(e.coin || '')}</b> <span class="fd-r">${esc(e.text || '')}</span></span><span class="fd-s">${esc(NAMES[e.actor] || e.actor)}${e.kind === 'kill' ? ' · cortada' : ''}</span></span>${val}</${tag}>`;
+    const title = e.coin || (e.text || '');
+    const who = NAMES[e.actor] || e.actor || '';
+    let detail = e.text || '';
+    if (detail && who && detail.toLowerCase().startsWith(who.toLowerCase())) {
+      /* subtitle already names the actor */
+    } else if (detail && who) {
+      detail = who + ' · ' + detail;
+    } else {
+      detail = detail || who;
+    }
+    if (e.kind === 'kill' && !/cortada/i.test(detail)) detail = (detail ? detail + ' · ' : '') + 'cortada';
+    const when = hms2(e);
+    let sub = detail;
+    if (when) {
+      const parts = (detail || '').split(/\s*[·•]\s*/).filter(Boolean);
+      sub = parts.length ? [parts[0], when].concat(parts.slice(1)).join(' · ') : when;
+    }
+    let val = '', cls = '';
+    if (e.usd != null && trade) {
+      cls = e.kind === 'bought' ? '' : (e.usd >= 0 ? 'green' : 'red');
+      val = e.kind === 'bought' ? usd(e.usd) : (e.usd >= 0 ? '+' : '-') + usd(Math.abs(e.usd)).replace('-', '');
+    } else if (['kill', 'rejected', 'refused', 'skipped'].includes(e.kind)) {
+      val = 'Skipped';
+    }
+    return `<${tag} class="item act${enter ? ' enter' : ''}" data-id="${esc(e.id)}" ${attr}>
+      <span class="act-av">${av(e.coin || e.text, e.image, e.mint)}${actBadge(e.kind === 'kill' || e.kind === 'refused' ? 'skipped' : e.kind)}</span>
+      <span class="mid"><div class="t">${esc(title)}</div><div class="s">${esc(sub)}</div></span>
+      <span class="v num ${cls}">${esc(val)}</span></${tag}>`;
   }
   function renderFeed(feed) {
     const box = $('home-activity');
@@ -577,7 +634,7 @@
   const n0 = v => v == null || isNaN(v) ? '—' : Number(v).toLocaleString('en-US');
   const recent = (iso, s) => iso && Math.abs(Date.now() - new Date(iso).getTime()) < s * 1000;
   function av(name, img, mint, cls) {   // coin image only if the JSON carries a plain https URL, else a coloured initial
-    const u = safe(img), ch = esc(([...String(name || mint || '?').replace(/^[^A-Za-z0-9]+/, '')][0] || '?').toUpperCase());
+    const u = imgFor(mint, img), ch = esc(([...String(name || mint || '?').replace(/^[^A-Za-z0-9]+/, '')][0] || '?').toUpperCase());
     let h = 0; for (const x of String(mint || name || '')) h = (h * 31 + x.charCodeAt(0)) >>> 0;
     return u ? `<span class="cav ${cls || ''}"><img src="${esc(u)}" alt="" referrerpolicy="no-referrer" loading="lazy"></span>` : `<span class="cav ${cls || ''}" style="background:hsl(${h % 360} 55% 38%)">${ch}</span>`;
   }
@@ -626,16 +683,20 @@
       <span class="ag-val num ${vc}">${val}</span></button>`;
   }
   // Activity rows: coin avatar (image if the JSON has one, else a coloured initial) + a small badge for the kind
-  const ACT_ICO = {bought: ['#0a84ff', '↓'], sold: ['#30d158', '↑'], stopped: ['#ff453a', '×'], rejected: ['#48484a', '×']};
   const TRADE = ['bought', 'sold', 'stopped'];
   function actRow(r) {
-    const [col, ch] = ACT_ICO[r.kind] || ['#48484a', '·'];
     const val = r.value || '', cls = r.kind === 'stopped' || /^-/.test(val) ? 'red' : (r.kind === 'sold' && /^\+/.test(val) ? 'green' : '');
     const attr = r.mint ? (r.opens === 'coin' ? `data-coin="${esc(r.mint)}"` : `data-audit="${esc(r.mint)}"`) : '';
     const nm = String(r.title || '').replace(/^(Bought|Sold|Stopped|Rejected|Skipped)\s+/, '');
-    const sub = String(r.subtitle || '').replace(/ · /g, ' • ') + (r.tsIso && !/\d\d:\d\d/.test(r.subtitle || '') ? ' • ' + hm(r.tsIso) : '');
-    return `<button class="item act" ${attr}><span class="act-av">${av(nm, r.image, r.mint)}<i class="act-bd" style="background:${col}">${ch}</i></span>
-      <span class="mid"><div class="t">${esc(r.title)}</div><div class="s">${esc(sub)}</div></span><span class="v num ${cls}">${esc(val.split(' · ')[0])}${val.includes(' · ') ? `<div class="s">${esc(val.split(' · ').slice(1).join(' · '))}</div>` : ''}</span></button>`;
+    let sub = String(r.subtitle || '').replace(/\s*[·•]\s*\d{1,2}:\d{2}(\s*[AP]M)?\s*$/i, '').trim();
+    const when = clock12(r.tsIso || r.ts);
+    if (when && !sub.includes(when)) {
+      const parts = sub.split(/\s*[·•]\s*/).filter(Boolean);
+      sub = parts.length ? [parts[0], when].concat(parts.slice(1)).join(' · ') : when;
+    }
+    const mainVal = val.split(' · ')[0] || '';
+    return `<button class="item act" ${attr}><span class="act-av">${av(nm, r.image, r.mint)}${actBadge(r.kind)}</span>
+      <span class="mid"><div class="t">${esc(r.title)}</div><div class="s">${esc(sub)}</div></span><span class="v num ${cls}">${esc(mainVal)}</span></button>`;
   }
   function renderHomeActivity(a) {
     const rows = (a && a.rows) || [];
@@ -1233,5 +1294,5 @@
     if ($('ag-rows')) $('ag-rows').innerHTML = ''; return;
   }
   loadingLayout();
-  pollState().then(() => { refreshScreen(); tryGet('index').catch(() => {}); pollEvents(); pollDemo(); pollOvernight(); pollLiveScreen(); });
+  pollState().then(() => { refreshScreen(); tryGet('index').catch(() => {}); pollEvents(); pollDemo(); pollOvernight(); pollLiveScreen(); pollTokenImages().then(() => refreshScreen()); });
 })();

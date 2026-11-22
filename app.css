@@ -227,7 +227,11 @@ main{max-width:560px;margin:0 auto;padding:env(safe-area-inset-top) calc(16px + 
   background:rgba(22,22,24,.72);-webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px);
   border-top:.5px solid var(--sep);z-index:10}
 .tabbar button{min-width:64px;min-height:48px;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;color:var(--ter)}
-.tabbar button.on{color:var(--text)}
+.tabbar button.on{color:#fff}
+.tab-ic{width:24px;height:24px;display:block;fill:currentColor;flex:none}
+.tab-ic-pulse{fill:none}
+.tabbar button.on .tab-ic:not(.tab-ic-pulse){fill:#fff}
+.tabbar button.on .tab-ic-pulse{stroke:#fff}
 .ic{width:24px;height:24px;border:2px solid currentColor;display:block}
 .ic-home{border-radius:5px}
 .ic-agents{border-radius:50%}
@@ -342,10 +346,14 @@ button.mode-pill[disabled],button.mode-pill[aria-disabled="true"]{opacity:.45;cu
 .item.act{padding:10px 0;border-bottom:.5px solid rgba(84,84,88,.35);min-height:62px}
 .act-av{position:relative;flex:none}
 .act-av .cav{width:40px;height:40px;font-size:16px}
-.act-bd{position:absolute;right:-3px;bottom:-3px;width:17px;height:17px;border-radius:50%;font-style:normal;font-size:11px;font-weight:800;color:#fff;
-  display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px #000}
-.item.act .t{font-size:16px;font-weight:700}
-.item.act .v{font-size:16px;font-weight:700} .item.act .v .s{font-weight:500}
+.act-bd{position:absolute;right:-3px;bottom:-3px;width:18px;height:18px;border-radius:50%;font-style:normal;color:#fff;
+  display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px #000;overflow:hidden}
+.act-bd svg{width:11px;height:11px;display:block}
+.item.act .t{font-size:16px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item.act .s{font-size:13px;color:var(--sec);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item.act .v{font-size:16px;font-weight:700;text-align:right;flex:none} .item.act .v .s{font-weight:500}
+.item.act .mid{min-width:0;flex:1}
+.bot-ln .cav{width:18px;height:18px;font-size:9px;margin-right:6px;vertical-align:middle;display:inline-flex}
 .confetti{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:40}
 body.demo .gt-top{margin-top:0}
 @media (prefers-reduced-motion:reduce){.mode-pill i{animation:none}.ag-row{transition:none}}

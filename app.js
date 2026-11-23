@@ -1407,11 +1407,52 @@
   }
   if ($('btn-replay')) $('btn-replay').onclick = () => { if (!cache.replay || !cache.replay.hasReplay) return; if (replayOn) stopReplay(true); else startReplay(); };
 
-  // Live screen (t374u): public frame + caption published by ops/live_screen_capture.py. Never a secret path.
-  const LIVE_MAX_AGE_S = 15 * 60;
-  const LIVE_CAPTION_URL = 'https://raw.githubusercontent.com/kaykefranco01-hash/desk-app/live-screen/live/caption.json';
-  const LIVE_FRAME_URL = 'https://raw.githubusercontent.com/kaykefranco01-hash/desk-app/live-screen/live/frame.jpg';
+  // Live screen (t374u / t390u): public frame + caption from the live-screen branch.
+  // raw.githubusercontent.com caches a stable branch URL for ~5 min and ignores ?t=.
+  // The capturer also writes live/p/<15s-bucket>.json and .jpg (new path = CDN miss).
+  // SHA URLs are immediate too, but we do not poll api.github.com (60 req/h/IP).
+  const LIVE_MAX_AGE_S = 3 * 60;
+  const LIVE_POLL_S = 15;
+  const LIVE_BUCKET_S = 15;
+  const LIVE_REPO = 'kaykefranco01-hash/desk-app';
+  const LIVE_BRANCH = 'live-screen';
+  const LIVE_RAW = 'https://raw.githubusercontent.com/' + LIVE_REPO + '/';
   const LIVE_AC = {scanner: '#0a84ff', auditor: '#bf5af2', analyst: '#30d158', executor: '#ff9f0a', risk: '#ff453a', brain: '#5e5ce6', discover: '#64d2ff'};
+  function livePtrBuckets(nowS) {
+    const cur = Math.floor(nowS / LIVE_BUCKET_S) * LIVE_BUCKET_S;
+    const out = [];
+    for (let i = -1; i <= Math.ceil(LIVE_MAX_AGE_S / LIVE_BUCKET_S); i++) out.push(cur - i * LIVE_BUCKET_S);
+    return out;
+  }
+  async function fetchCaption(url) {
+    const r = await fetch(url, {cache: 'no-store', referrerPolicy: 'no-referrer'});
+    if (!r.ok) return null;
+    const j = await r.json();
+    const age = j && j.epoch != null ? (Date.now() / 1000 - Number(j.epoch)) : Infinity;
+    if (j && isFinite(age) && age <= LIVE_MAX_AGE_S) return {j, age};
+    return null;
+  }
+  async function resolveLiveCaption() {
+    const buckets = livePtrBuckets(Date.now() / 1000);
+    const branch = LIVE_RAW + LIVE_BRANCH + '/';
+    // Newest first, 4 at a time, so a fresh pointer is found in one or two rounds.
+    for (let i = 0; i < buckets.length; i += 4) {
+      const slice = buckets.slice(i, i + 4);
+      const found = await Promise.all(slice.map(async b => {
+        try {
+          const got = await fetchCaption(branch + 'live/p/' + b + '.json');
+          return got ? {bucket: b, ...got} : null;
+        } catch (e) { return null; }
+      }));
+      const hit = found.filter(Boolean).sort((a, b) => Number(b.j.epoch) - Number(a.j.epoch))[0];
+      if (hit) return {src: branch + 'live/p/' + hit.bucket + '.jpg', ...hit};
+    }
+    try {
+      const got = await fetchCaption(branch + 'live/caption.json');
+      if (got) return {src: branch + 'live/frame.jpg', bucket: 0, ...got};
+    } catch (e) { /* placeholder */ }
+    return null;
+  }
   function agoPt(s) {
     if (s < 45) return 'agora';
     if (s < 3600) return 'há ' + Math.max(1, Math.round(s / 60)) + ' min';
@@ -1430,14 +1471,12 @@
   }
   async function pollLiveScreen() {
     const img = $('live-frame'), ph = $('live-ph'), cap = $('live-cap'), badge = $('live-badge');
-    if (!img || !ph) { setTimeout(pollLiveScreen, 30000); return; }
+    if (!img || !ph) { setTimeout(pollLiveScreen, LIVE_POLL_S * 1000); return; }
     let shown = false;
     try {
-      const r = await fetch(LIVE_CAPTION_URL + '?t=' + Date.now(), {cache: 'no-store', referrerPolicy: 'no-referrer'});
-      const j = r.ok ? await r.json() : null;
-      const age = j && j.epoch != null ? (Date.now() / 1000 - Number(j.epoch)) : Infinity;
-      if (j && isFinite(age) && age <= LIVE_MAX_AGE_S) {
-        const src = LIVE_FRAME_URL + '?t=' + Math.floor(Number(j.epoch));
+      const got = await resolveLiveCaption();
+      if (got) {
+        const j = got.j, age = got.age, src = got.src;
         img.onload = () => { img.hidden = false; ph.hidden = true; };
         img.onerror = () => showLivePlaceholder();
         if (img.src !== src) img.src = src; else { img.hidden = false; ph.hidden = true; }
@@ -1464,7 +1503,7 @@
       }
     } catch (e) { /* placeholder */ }
     if (!shown) showLivePlaceholder();
-    setTimeout(pollLiveScreen, 30000);
+    setTimeout(pollLiveScreen, LIVE_POLL_S * 1000);
   }
   // ---------- start ----------
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});

@@ -1477,9 +1477,14 @@
       const got = await resolveLiveCaption();
       if (got) {
         const j = got.j, age = got.age, src = got.src;
-        img.onload = () => { img.hidden = false; ph.hidden = true; };
-        img.onerror = () => showLivePlaceholder();
-        if (img.src !== src) img.src = src; else { img.hidden = false; ph.hidden = true; }
+        const show = () => { if (img.getAttribute('src') !== src) img.src = src; img.hidden = false; ph.hidden = true; };
+        if (img.getAttribute('src') === src && img.naturalWidth > 0) show();
+        else {
+          const probe = new Image();
+          probe.onload = show;
+          probe.onerror = () => { if (!img.naturalWidth) showLivePlaceholder(); };
+          probe.src = src;
+        }
         const label = j.actor_label || '';
         if (cap) {
           const bits = [];
@@ -1502,7 +1507,7 @@
         shown = true;
       }
     } catch (e) { /* placeholder */ }
-    if (!shown) showLivePlaceholder();
+    if (!shown && !(img && !img.hidden && img.naturalWidth > 0)) showLivePlaceholder();
     setTimeout(pollLiveScreen, LIVE_POLL_S * 1000);
   }
   // ---------- start ----------

@@ -33,7 +33,11 @@
       <button type="button" id="paper" class="mode-pill paper pill-paper-tag" aria-label="Mudar entre PAPER e LIVE"><i></i><b id="mode-t">PAPER</b></button>
     </div>
     <div class="sub-row"><span id="today" class="num today skel-i">▲ $0.00 (0.00%)</span><span id="mult" class="pill-mult num skel-i">1.00×</span><span id="pnl-since" class="pnl-since ter small"></span></div>
-    <div id="night-status" class="night-status" aria-live="polite">Noite PAPER · 22:00–06:30 Lisboa</div>
+    <div class="night-row">
+      <div id="night-status" class="night-status" aria-live="polite">Noite PAPER · 22:00–06:30 Lisboa</div>
+      <button type="button" id="btn-replay" class="replay-btn" disabled aria-disabled="true">Replay da noite</button>
+    </div>
+    <div id="replay-banner" class="replay-banner" hidden role="status">Replay · acelerado</div>
     <div id="last-trade" class="lt-line" aria-live="polite" hidden></div>
     <div id="open-pos" class="open-pos" hidden></div>
     <div class="chart-wrap" id="chart-wrap"><canvas id="chart" aria-label="Gráfico do saldo"></canvas><i id="chart-head" class="chart-head" hidden></i>
@@ -49,6 +53,7 @@
         <div id="live-ph" class="live-ph">Ecrã ao vivo durante a noite</div>
         <div class="live-ov"><i class="live-dot"></i> Live · Computador do bot</div>
         <div id="live-badge" class="live-badge" hidden></div>
+        <div id="live-pills" class="live-pills" aria-live="polite"></div>
         <div id="live-cap" class="live-cap"></div>
       </div>
     </div>

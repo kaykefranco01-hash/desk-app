@@ -29,7 +29,7 @@
     return m.color || '#30d158';
   }
   const ease = t => 1 - Math.pow(1 - t, 3);
-  function drawLine(canvas, data, prog, markAlpha, reveal, head) {
+  function drawLine(canvas, data, prog, markAlpha, reveal, head, view) {
     if (!canvas.clientWidth) return (data.points || []).length > 1;
     const {c, w, h} = setup(canvas);
     const pts = data.points || [], start = data.startValue;
@@ -46,10 +46,10 @@
       use = pts.slice(0, -1).concat([[a[0] + (b[0] - a[0]) * prog, a[1] + (b[1] - a[1]) * prog]]);
     }
     const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]).concat(start != null ? [start] : []);
-    const x0 = Math.min(...xs), x1 = Math.max(...xs);
-    let y0 = Math.min(...ys), y1 = Math.max(...ys);
+    let x0 = (view && view.x0 != null) ? view.x0 : Math.min(...xs), x1 = (view && view.x1 != null) ? view.x1 : Math.max(...xs);
+    let y0 = (view && view.y0 != null) ? view.y0 : Math.min(...ys), y1 = (view && view.y1 != null) ? view.y1 : Math.max(...ys);
     if (y1 - y0 < 1e-9) { y0 -= 1; y1 += 1; }
-    const pad = (y1 - y0) * 0.08; y0 -= pad;
+    if (!(view && view.y0 != null)) { const pad = (y1 - y0) * 0.08; y0 -= pad; }
     const X = t => padX + (w - 2 * padX - 8) * (x1 === x0 ? 1 : (t - x0) / (x1 - x0));
     const Y = v => (h - bot) - (h - bot - top - nRows * (pillH + 10)) * ((v - y0) / (y1 - y0));
     if (reveal < 1) {                              // left-to-right draw: cut the series at the reveal edge
@@ -123,6 +123,41 @@
     c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
 
   // opts.reveal: draw left to right (first load / range change). opts.head: element for the pulsing head ring.
+  // opts.pan / data.xMin,data.xMax: fixed or trailing window so the head runs to the right, then the chart pans left.
+  // Y-axis eases to a new range instead of jumping.
+  function targetView(data, opts) {
+    const pts = data.points || [];
+    if (pts.length < 1) return null;
+    const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]).concat(data.startValue != null ? [data.startValue] : []);
+    let x0 = data.xMin != null ? data.xMin : Math.min(...xs);
+    let x1 = data.xMax != null ? data.xMax : Math.max(...xs);
+    if (opts.pan && data.xMin == null && data.xMax == null && !RM()) {
+      const head = Math.max(...xs), first = Math.min(...xs);
+      const span = Number(data.span || opts.span || 3600);
+      if (head - first < span) { x0 = first; x1 = first + span; }
+      else { x1 = head; x0 = head - span; }
+    }
+    if (x1 === x0) x1 = x0 + 1;
+    let y0 = Math.min(...ys), y1 = Math.max(...ys);
+    if (y1 - y0 < 1e-9) { y0 -= 1; y1 += 1; }
+    const pad = (y1 - y0) * 0.08; y0 -= pad;
+    return {x0, x1, y0, y1};
+  }
+  function easeView(st, tgt, instant) {
+    if (!tgt) return {view: null, settling: false};
+    if (instant || RM() || st.vx0 == null) {
+      st.vx0 = tgt.x0; st.vx1 = tgt.x1; st.vy0 = tgt.y0; st.vy1 = tgt.y1;
+      return {view: {x0: st.vx0, x1: st.vx1, y0: st.vy0, y1: st.vy1}, settling: false};
+    }
+    const k = 0.2;
+    st.vx0 += (tgt.x0 - st.vx0) * k; st.vx1 += (tgt.x1 - st.vx1) * k;
+    st.vy0 += (tgt.y0 - st.vy0) * k; st.vy1 += (tgt.y1 - st.vy1) * k;
+    const close = (a, b, s) => Math.abs(a - b) < Math.max(1e-6, Math.abs(s) * 0.002);
+    const done = close(st.vx0, tgt.x0, tgt.x1 - tgt.x0) && close(st.vx1, tgt.x1, tgt.x1 - tgt.x0)
+      && close(st.vy0, tgt.y0, tgt.y1 - tgt.y0) && close(st.vy1, tgt.y1, tgt.y1 - tgt.y0);
+    if (done) { st.vx0 = tgt.x0; st.vx1 = tgt.x1; st.vy0 = tgt.y0; st.vy1 = tgt.y1; }
+    return {view: {x0: st.vx0, x1: st.vx1, y0: st.vy0, y1: st.vy1}, settling: !done};
+  }
   function line(canvas, data, opts) {
     opts = opts || {};
     const st = lineState.get(canvas) || {n: 0, seen: new Set(), born: new Map(), raf: 0};
@@ -133,29 +168,38 @@
     const reveal = opts.reveal && !RM() && n > 1;
     for (const m of data.marks || []) { const k = key(m); if (!st.seen.has(k)) { st.seen.add(k); st.born.set(k, RM() || reveal ? -1 : now); } }
     let rv = reveal ? 0 : 1, t0 = performance.now();
-    const x0 = n ? data.points[0][0] : 0, x1 = n ? data.points[n - 1][0] : 1;
+    const spanX0 = n ? (data.xMin != null ? data.xMin : data.points[0][0]) : 0;
+    const spanX1 = n ? (data.xMax != null ? data.xMax : data.points[n - 1][0]) : 1;
     const alpha = m => {   // pills pop in when the line reaches them (reveal) or when they are new (live)
       let b = st.born.get(key(m));
       if (b === -1) {
         if (RM() || rv >= 1) return 1;
-        const at = (m.ts - x0) / ((x1 - x0) || 1);
+        const at = (m.ts - spanX0) / ((spanX1 - spanX0) || 1);
         if (rv < at) return 0;
         st.born.set(key(m), performance.now()); b = performance.now();
       }
       return Math.min(1, (performance.now() - (b || 0)) / 320);
     };
     const pending = () => (data.marks || []).some(m => alpha(m) < 1);
+    const tick = (prog, revealAmt, instantY) => {
+      const ev = easeView(st, targetView(data, opts), instantY);
+      const r = drawLine(canvas, data, prog, alpha, revealAmt, opts.head, ev.view);
+      return {ok: r, settling: ev.settling};
+    };
     if (RM() || (!grew && !reveal)) {
-      const r = drawLine(canvas, data, 1, alpha, 1, opts.head);
-      if (!RM() && pending()) { const step = () => { drawLine(canvas, data, 1, alpha, 1, opts.head); if (pending()) st.raf = requestAnimationFrame(step); }; st.raf = requestAnimationFrame(step); }
-      return r;
+      const r = tick(1, 1, RM());
+      if (!RM() && (pending() || r.settling)) {
+        const step = () => { const n2 = tick(1, 1, false); if (pending() || n2.settling) st.raf = requestAnimationFrame(step); };
+        st.raf = requestAnimationFrame(step);
+      }
+      return r.ok;
     }
     const DUR = reveal ? 1400 : 300;
     const step = () => {
       const p = Math.min(1, (performance.now() - t0) / DUR);
       if (reveal) rv = ease(p);
-      drawLine(canvas, data, reveal ? 1 : p, alpha, rv, opts.head);
-      if (p < 1 || pending()) st.raf = requestAnimationFrame(step);
+      const n2 = tick(reveal ? 1 : p, rv, false);
+      if (p < 1 || pending() || n2.settling) st.raf = requestAnimationFrame(step);
     };
     st.raf = requestAnimationFrame(step); return n >= 2;
   }

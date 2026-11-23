@@ -1,0 +1,1027 @@
+{
+  "hasReplay": true,
+  "inProgress": true,
+  "label": "22/11",
+  "date": "2026-11-22",
+  "start": "2026-11-22T22:00:00+00:00",
+  "end": "2026-11-23T06:30:00+00:00",
+  "t0": 1795384800.0,
+  "t1": 1795391951.48,
+  "windowS": 25,
+  "startBalance": 100.0,
+  "endBalance": 100.0,
+  "points": [
+    [
+      1795384803.39,
+      100.0
+    ],
+    [
+      1795384863.45,
+      100.0
+    ],
+    [
+      1795384923.86,
+      100.0
+    ],
+    [
+      1795384983.92,
+      100.0
+    ],
+    [
+      1795385043.99,
+      100.0
+    ],
+    [
+      1795385104.05,
+      100.0
+    ],
+    [
+      1795385164.1,
+      100.0
+    ],
+    [
+      1795385224.16,
+      100.0
+    ],
+    [
+      1795385284.22,
+      100.0
+    ],
+    [
+      1795385349.62,
+      100.0
+    ],
+    [
+      1795385410.28,
+      100.0
+    ],
+    [
+      1795385470.36,
+      100.0
+    ],
+    [
+      1795385530.47,
+      100.0
+    ],
+    [
+      1795385590.53,
+      100.0
+    ],
+    [
+      1795385650.58,
+      100.0
+    ],
+    [
+      1795385710.64,
+      100.0
+    ],
+    [
+      1795385770.71,
+      100.0
+    ],
+    [
+      1795385830.76,
+      100.0
+    ],
+    [
+      1795385890.82,
+      100.0
+    ],
+    [
+      1795386166.56,
+      100.0
+    ],
+    [
+      1795386226.56,
+      100.0
+    ],
+    [
+      1795386286.6,
+      100.0
+    ],
+    [
+      1795386456.12,
+      100.0
+    ],
+    [
+      1795386516.14,
+      100.0
+    ],
+    [
+      1795386576.16,
+      100.0
+    ],
+    [
+      1795386651.61,
+      100.0
+    ],
+    [
+      1795386711.62,
+      100.0
+    ],
+    [
+      1795386771.64,
+      100.0
+    ],
+    [
+      1795386831.66,
+      100.0
+    ],
+    [
+      1795386891.68,
+      100.0
+    ],
+    [
+      1795386951.7,
+      100.0
+    ],
+    [
+      1795387011.72,
+      100.0
+    ],
+    [
+      1795387071.74,
+      100.0
+    ],
+    [
+      1795387131.76,
+      100.0
+    ],
+    [
+      1795387327.32,
+      100.0
+    ],
+    [
+      1795387387.32,
+      100.0
+    ],
+    [
+      1795387447.35,
+      100.0
+    ],
+    [
+      1795387645.61,
+      100.0
+    ],
+    [
+      1795387705.63,
+      100.0
+    ],
+    [
+      1795387765.69,
+      100.0
+    ],
+    [
+      1795387829.68,
+      100.0
+    ],
+    [
+      1795388050.49,
+      100.0
+    ],
+    [
+      1795388110.5,
+      100.0
+    ],
+    [
+      1795388170.52,
+      100.0
+    ],
+    [
+      1795388231.0,
+      100.0
+    ],
+    [
+      1795388295.08,
+      100.0
+    ],
+    [
+      1795388355.08,
+      100.0
+    ],
+    [
+      1795388577.5,
+      100.0
+    ],
+    [
+      1795388637.52,
+      100.0
+    ],
+    [
+      1795388697.54,
+      100.0
+    ],
+    [
+      1795388757.55,
+      100.0
+    ],
+    [
+      1795388817.57,
+      100.0
+    ],
+    [
+      1795388877.59,
+      100.0
+    ],
+    [
+      1795388937.6,
+      100.0
+    ],
+    [
+      1795388997.62,
+      100.0
+    ],
+    [
+      1795389057.63,
+      100.0
+    ],
+    [
+      1795389234.56,
+      100.0
+    ],
+    [
+      1795389294.81,
+      100.0
+    ],
+    [
+      1795389354.83,
+      100.0
+    ],
+    [
+      1795389429.57,
+      100.0
+    ],
+    [
+      1795389489.58,
+      100.0
+    ],
+    [
+      1795389549.6,
+      100.0
+    ],
+    [
+      1795389751.32,
+      100.0
+    ],
+    [
+      1795389811.34,
+      100.0
+    ],
+    [
+      1795389871.35,
+      100.0
+    ],
+    [
+      1795389961.61,
+      100.0
+    ],
+    [
+      1795390021.63,
+      100.0
+    ],
+    [
+      1795390081.64,
+      100.0
+    ],
+    [
+      1795390141.66,
+      100.0
+    ],
+    [
+      1795390201.68,
+      100.0
+    ],
+    [
+      1795390261.69,
+      100.0
+    ],
+    [
+      1795390321.71,
+      100.0
+    ],
+    [
+      1795390381.73,
+      100.0
+    ],
+    [
+      1795390451.19,
+      100.0
+    ],
+    [
+      1795390515.85,
+      100.0
+    ],
+    [
+      1795390575.87,
+      100.0
+    ],
+    [
+      1795390660.22,
+      100.0
+    ],
+    [
+      1795390841.62,
+      100.0
+    ],
+    [
+      1795390901.62,
+      100.0
+    ],
+    [
+      1795390961.65,
+      100.0
+    ],
+    [
+      1795391039.57,
+      100.0
+    ],
+    [
+      1795391099.61,
+      100.0
+    ],
+    [
+      1795391159.63,
+      100.0
+    ],
+    [
+      1795391298.44,
+      100.0
+    ],
+    [
+      1795391358.45,
+      100.0
+    ],
+    [
+      1795391418.47,
+      100.0
+    ],
+    [
+      1795391481.54,
+      100.0
+    ],
+    [
+      1795391541.56,
+      100.0
+    ],
+    [
+      1795391601.58,
+      100.0
+    ],
+    [
+      1795391661.6,
+      100.0
+    ],
+    [
+      1795391721.61,
+      100.0
+    ],
+    [
+      1795391781.63,
+      100.0
+    ],
+    [
+      1795391841.65,
+      100.0
+    ],
+    [
+      1795391901.67,
+      100.0
+    ],
+    [
+      1795391961.69,
+      100.0
+    ],
+    [
+      1795392021.7,
+      100.0
+    ],
+    [
+      1795392081.72,
+      100.0
+    ]
+  ],
+  "events": [
+    {
+      "id": "s324",
+      "ts": 1795384942.83,
+      "actor": "scanner",
+      "mint": "AwnKEMhX53PU26guy67Y4QiuFF2EzTzbcHNhFAiwpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $28",
+      "coin": "KIMCHI"
+    },
+    {
+      "id": "s325",
+      "ts": 1795385134.47,
+      "actor": "scanner",
+      "mint": "97WxZS9MeABFKGqhMpsV8GwoeZFx7BoGdmZCCDUhpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $12.6K",
+      "coin": "Mandy"
+    },
+    {
+      "id": "s326",
+      "ts": 1795385169.48,
+      "actor": "scanner",
+      "mint": "5nFhgdxCccGnHL3HU7ikSRMKrWHHMD97ZTn51KP9pump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $266",
+      "coin": "YUG IS A NIG"
+    },
+    {
+      "id": "s327",
+      "ts": 1795385306.81,
+      "actor": "scanner",
+      "mint": "2ShQzrbeaBXzdCiLiuNnM4dK8j8HsLbFVjZgxT9zpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "top 10 hold 94%",
+      "coin": "1B"
+    },
+    {
+      "id": "s328",
+      "ts": 1795385427.12,
+      "actor": "scanner",
+      "mint": "9YdeAChyHusXuhASQUtUF6FHnbKY9SkuypRZRedDpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "never qualified",
+      "coin": "Lab"
+    },
+    {
+      "id": "s329",
+      "ts": 1795385461.33,
+      "actor": "scanner",
+      "mint": "DF7SpmTYrr44c2H3XobdcD3G2NyTyGMhxT2R6T7hpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $11.1K",
+      "coin": "Anusha"
+    },
+    {
+      "id": "s330",
+      "ts": 1795385539.9,
+      "actor": "scanner",
+      "mint": "89JrVKsQVEZgFBnYHgSzY2Zk7sY6k1gERxTb24cqpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $11.9K",
+      "coin": "NVIDIA"
+    },
+    {
+      "id": "s331",
+      "ts": 1795385648.3,
+      "actor": "scanner",
+      "mint": "Fp36GmdfhumV9pEVnRV25yW8iUXKqLQuLRbe9CoKpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $7",
+      "coin": "Ayogima"
+    },
+    {
+      "id": "s332",
+      "ts": 1795385724.59,
+      "actor": "scanner",
+      "mint": "5ajKDjnprQhAZb7psoUbDSdqocaQJgnWySLTmH8ppump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $12.4K",
+      "coin": "VEST"
+    },
+    {
+      "id": "s333",
+      "ts": 1795386184.03,
+      "actor": "scanner",
+      "mint": "8dgysH4uqQNEtszLX5is1sugjZuppA482k5uuvMxpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $6",
+      "coin": "MCH"
+    },
+    {
+      "id": "s334",
+      "ts": 1795386190.07,
+      "actor": "scanner",
+      "mint": "Bq8dHkGWsRU1eAQVEF7KgrNdtM48bpMWw1e8U8W1pump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $9.4K",
+      "coin": "JUDE"
+    },
+    {
+      "id": "s335",
+      "ts": 1795386194.05,
+      "actor": "scanner",
+      "mint": "2ShsPccWG7P4qBCynx6EQkEB9ga2GWgemZnTEn86pump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $17.7K",
+      "coin": "Zalora"
+    },
+    {
+      "id": "s336",
+      "ts": 1795386477.02,
+      "actor": "scanner",
+      "mint": "ADs7gnpeYvkBLthYhqRcrVTeGSFQuqfYnv3PbS6Bpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "top 10 hold 60%",
+      "coin": "XMAS"
+    },
+    {
+      "id": "s337",
+      "ts": 1795386479.57,
+      "actor": "scanner",
+      "mint": "8G3nUPSu7FAho8WSUoYxpAGDaCKDjEiEnGyV5fEVpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $8.8K",
+      "coin": "Mask"
+    },
+    {
+      "id": "s338",
+      "ts": 1795386617.46,
+      "actor": "scanner",
+      "mint": "7EJbUEptnxkjjtKvS4CeexMDBYpcpLC5XTNoNbeBpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $17",
+      "coin": "GTA6"
+    },
+    {
+      "id": "s339",
+      "ts": 1795386699.82,
+      "actor": "scanner",
+      "mint": "C16heAQjYn6surorCV3mW3wo4o4oqNgko1WWGNjVpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $124",
+      "coin": "FERSPE"
+    },
+    {
+      "id": "s340",
+      "ts": 1795386729.43,
+      "actor": "scanner",
+      "mint": "CkYnDyDcgyYB4BzwGdbK2T6G8BzACcbPhS4haHbPpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "never qualified",
+      "coin": "DRING"
+    },
+    {
+      "id": "s341",
+      "ts": 1795386869.68,
+      "actor": "scanner",
+      "mint": "39cvo6MwTDXyFBJGaw1iaZaKxUL3LGo9Q4AtWat9pump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $11.8K",
+      "coin": "Rockstar"
+    },
+    {
+      "id": "s342",
+      "ts": 1795387049.29,
+      "actor": "scanner",
+      "mint": "gNnFguiXih6icYKRCqKdqsvkTmsJNPv6Ldx5RY6pump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "never qualified",
+      "coin": "VICENUE"
+    },
+    {
+      "id": "s343",
+      "ts": 1795387344.67,
+      "actor": "scanner",
+      "mint": "DVtgyuDebtE52AHBYtnLYpZBJDr1d4hDaYX1qt8epump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $1.6K",
+      "coin": "DTTY"
+    },
+    {
+      "id": "s344",
+      "ts": 1795387346.87,
+      "actor": "scanner",
+      "mint": "CFwLe7XQ1FKs58zCYGx3VihvXysGYrqeYoYoTAhspump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $12.1K",
+      "coin": "DCTY"
+    },
+    {
+      "id": "s345",
+      "ts": 1795387728.83,
+      "actor": "scanner",
+      "mint": "3kFnvwHQcdxsiDHJi5fen5Z67gv3qny8LVCmZVXJpump",
+      "kind": "pass",
+      "tone": "blue",
+      "text": "passou · liq $43,644 → Auditor",
+      "coin": "ZOL"
+    },
+    {
+      "id": "w2",
+      "ts": 1795387728.83,
+      "actor": "executor",
+      "mint": "3kFnvwHQcdxsiDHJi5fen5Z67gv3qny8LVCmZVXJpump",
+      "kind": "skipped",
+      "tone": "grey",
+      "text": "hold · holders 226→3007",
+      "coin": "ZOL"
+    },
+    {
+      "mint": "3kFnvwHQcdxsiDHJi5fen5Z67gv3qny8LVCmZVXJpump",
+      "id": "a15",
+      "ts": 1795387759.71,
+      "kind": "passed",
+      "actor": "auditor",
+      "text": "8/8 aprovada → Analyst",
+      "tone": "green",
+      "coin": "ZOL"
+    },
+    {
+      "id": "v1",
+      "ts": 1795387759.95,
+      "actor": "analyst",
+      "mint": "3kFnvwHQcdxsiDHJi5fen5Z67gv3qny8LVCmZVXJpump",
+      "kind": "verdict",
+      "tone": "green",
+      "text": "score 100 · passou",
+      "coin": "ZOL"
+    },
+    {
+      "id": "s346",
+      "ts": 1795387793.64,
+      "actor": "scanner",
+      "mint": "3ZFJrK8bhuqNn6GejhnWPCMGGVig9yfinzDJG51Npump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $65",
+      "coin": "PS5"
+    },
+    {
+      "id": "s347",
+      "ts": 1795387824.74,
+      "actor": "scanner",
+      "mint": "4Lc8Sh5HeFqiQMZ65NzmLwUDjwDLbSg8Cy4bhhNqpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $19",
+      "coin": "ULTRA"
+    },
+    {
+      "id": "s348",
+      "ts": 1795388056.22,
+      "actor": "scanner",
+      "mint": "J6a4rkrsTamyvr951QtSfRopZ7EyrQugSQCEmXSMpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $79",
+      "coin": "Zolana"
+    },
+    {
+      "id": "s349",
+      "ts": 1795388060.39,
+      "actor": "scanner",
+      "mint": "HyosVh6551qwA8xUqcaMHysUCNdR7gTsL1i9XZnCpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $18.6K",
+      "coin": "100K"
+    },
+    {
+      "id": "s350",
+      "ts": 1795388061.95,
+      "actor": "scanner",
+      "mint": "4P7sEjikKtMHpVw864ZMxpM8UY8JJi5WWXWsGuUupump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $18",
+      "coin": "$SBRICK"
+    },
+    {
+      "id": "s351",
+      "ts": 1795388066.2,
+      "actor": "scanner",
+      "mint": "HxpiqQCPnNX6ZnCzJriLUzmWsASoeC916kWtJYPnpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $7.5K",
+      "coin": "SI2SI"
+    },
+    {
+      "id": "s352",
+      "ts": 1795388236.38,
+      "actor": "scanner",
+      "mint": "CDi6FAbCadKxFHQFyKK2RFusQFCANoZtSyVWZPMHpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "top 10 hold 98%",
+      "coin": "1M"
+    },
+    {
+      "id": "s353",
+      "ts": 1795388314.44,
+      "actor": "scanner",
+      "mint": "GXvj7HGo3iFe1pAow9aWr4REiVjzEyJ2rX6qtPuJpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $1",
+      "coin": "$POW"
+    },
+    {
+      "id": "s354",
+      "ts": 1795388579.75,
+      "actor": "scanner",
+      "mint": "Ae4kQQVY3yD2hcb478bt7rwvSyEBde96hyL5qc3zpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "never qualified",
+      "coin": "NVINUS"
+    },
+    {
+      "id": "s355",
+      "ts": 1795388747.8,
+      "actor": "scanner",
+      "mint": "Bq1WdLuTirE5bnYJYJpp6AGyxriCNxJBpAAyTLCspump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $11.7K",
+      "coin": "Rockstar"
+    },
+    {
+      "id": "s356",
+      "ts": 1795388807.91,
+      "actor": "scanner",
+      "mint": "3VCDLQrHHxsCpVr5K6v7uweuLrFYaSDbeD9LntaLpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $28",
+      "coin": "ULTRA"
+    },
+    {
+      "id": "s357",
+      "ts": 1795388882.7,
+      "actor": "scanner",
+      "mint": "89DKn95R7QvjAcGSeqHvmj3pq7TJFbJcckURqjvuHsHp",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $11.0K",
+      "coin": "PRIVI"
+    },
+    {
+      "id": "s358",
+      "ts": 1795388978.12,
+      "actor": "scanner",
+      "mint": "H1SiFCymppGWErMb9dDMRQUMWu4UBSCCAZYb5krqpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $19.6K",
+      "coin": "Anon"
+    },
+    {
+      "id": "s359",
+      "ts": 1795389068.15,
+      "actor": "scanner",
+      "mint": "Bx4uNh6rCxdaFrEwMAhhZGxLDx7qZo1NL9Tez6rHpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $38",
+      "coin": "pumpit"
+    },
+    {
+      "id": "s360",
+      "ts": 1795389237.85,
+      "actor": "scanner",
+      "mint": "2jjhLUbyjNLTBvjeWppHdiPJtNpXq1K2PqPiaaCNpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $1",
+      "coin": "TPOLY"
+    },
+    {
+      "id": "s361",
+      "ts": 1795389239.17,
+      "actor": "scanner",
+      "mint": "5Tja97zVG3q25oTL5mwT3GzK8hFn2oV1a9MCGp9ipump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $4.5K",
+      "coin": "Claudflare"
+    },
+    {
+      "id": "s362",
+      "ts": 1795389433.87,
+      "actor": "scanner",
+      "mint": "7ZBVGEmY5jMksPwZpTx6HkAfhYEdQ8Efpa7SRkTApump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $11",
+      "coin": "WANTED"
+    },
+    {
+      "id": "s363",
+      "ts": 1795389475.35,
+      "actor": "scanner",
+      "mint": "45UCYyqd5fKKsUS9noGeDkPHH3pApp7LD17WNWqwpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $65",
+      "coin": "speedrun"
+    },
+    {
+      "id": "s364",
+      "ts": 1795389757.44,
+      "actor": "scanner",
+      "mint": "yB971GxLpaSYGzXAbzNU9wjfBLxA2k13QWZ83eqpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "top 10 hold 98%",
+      "coin": "EXEN"
+    },
+    {
+      "id": "s365",
+      "ts": 1795389781.84,
+      "actor": "scanner",
+      "mint": "5HmyPqNSSoJsousZmZDD8s87x2F3FTxcjj87jC81pump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "never qualified",
+      "coin": "RAVL"
+    },
+    {
+      "id": "s366",
+      "ts": 1795390061.92,
+      "actor": "scanner",
+      "mint": "Ecp2SuEkx9trWawCJ39b8mqqUbAYm9H9GvSesicGpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $3",
+      "coin": "RLV"
+    },
+    {
+      "id": "s367",
+      "ts": 1795390077.51,
+      "actor": "scanner",
+      "mint": "8PTJxKjmfoSA3giiPbDxmBGZfhAXD1c57ABVqZAPpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $53",
+      "coin": "RLV"
+    },
+    {
+      "id": "s368",
+      "ts": 1795390095.58,
+      "actor": "scanner",
+      "mint": "EWTJeCWUpyu5Mj2wH7qJuY1yPn7FfswHnmiTLpnapump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "top 10 hold 64%",
+      "coin": "ZOL"
+    },
+    {
+      "id": "s369",
+      "ts": 1795390172.62,
+      "actor": "scanner",
+      "mint": "8GPEiDkbouaBrPYmWXoxkLR2mqVcYMCyX3smajTUpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $9.5K",
+      "coin": "GEORGE"
+    },
+    {
+      "id": "s370",
+      "ts": 1795390302.44,
+      "actor": "scanner",
+      "mint": "6g9NQ1s7siUyJd9BATxcVcpxmf2Fi1QK83X4s4nKpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $7",
+      "coin": "LUCKY"
+    },
+    {
+      "id": "s371",
+      "ts": 1795390513.82,
+      "actor": "scanner",
+      "mint": "94KUB2k1rH2sh8NqjBtGZvuYJ2gtP1PdP5TeQdiJpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $87",
+      "coin": "IVNK"
+    },
+    {
+      "id": "s372",
+      "ts": 1795390845.26,
+      "actor": "scanner",
+      "mint": "6J33vrZDCq3MVEWFybPJoBezonCr6t5swBbCxVYFpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $1",
+      "coin": "GONE"
+    },
+    {
+      "id": "s373",
+      "ts": 1795390846.92,
+      "actor": "scanner",
+      "mint": "2kSz8Y6PUkNr4d132Djug1gCvyAtBUhpGEXMCbFbpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $21",
+      "coin": "SXSN"
+    },
+    {
+      "id": "s374",
+      "ts": 1795390858.12,
+      "actor": "scanner",
+      "mint": "A7VXHauL121YrXwBaPuEYZSNZ1QhyY3ZjpfUj3ycpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $13.0K",
+      "coin": "IShowSpeed"
+    },
+    {
+      "id": "s375",
+      "ts": 1795390862.46,
+      "actor": "scanner",
+      "mint": "5bDKsyrVsGAhv9tGcLwSGJJBUDLVmx79dnjsJwZPpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $20",
+      "coin": " $KROOP"
+    },
+    {
+      "id": "s376",
+      "ts": 1795390957.08,
+      "actor": "scanner",
+      "mint": "CSdHfpbYbeVUbXhJTVsfeQVGgfEEwtkGoWchbVwLpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $21",
+      "coin": "Goose"
+    },
+    {
+      "id": "s377",
+      "ts": 1795391368.59,
+      "actor": "scanner",
+      "mint": "8D2yLhKQ6C2z6p1Tc43oVgNVGJzjSWHiAy1ftFRgpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "never qualified",
+      "coin": "DacityCoin"
+    },
+    {
+      "id": "s378",
+      "ts": 1795391414.24,
+      "actor": "scanner",
+      "mint": "N9eU1aqc356x84ukKrKayAiEQLAr3bqFRAfTiFHpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $10",
+      "coin": "MOFA"
+    },
+    {
+      "id": "s379",
+      "ts": 1795391628.46,
+      "actor": "scanner",
+      "mint": "5h1KsYxQ43uPeZ4xtDXyWwuUx8GGeCifY479JdRvpump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $14",
+      "coin": "$AETH"
+    },
+    {
+      "id": "s380",
+      "ts": 1795391743.08,
+      "actor": "scanner",
+      "mint": "BLCFAiVwwbu1BtCWKmHUX4KaYdQqYkFNVpgJtjzipump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "never qualified",
+      "coin": "1T"
+    },
+    {
+      "id": "s381",
+      "ts": 1795391829.52,
+      "actor": "scanner",
+      "mint": "98YZ8JUNtzED41Nj9nZov4WnMJQt6E39TBJhaRxRMWYB",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $10.5K",
+      "coin": "LilChud"
+    },
+    {
+      "id": "s382",
+      "ts": 1795391951.48,
+      "actor": "scanner",
+      "mint": "HhkwewG9Xm2mFdAhpTZv8s7Ms6rAaxCjXEriyv9Spump",
+      "kind": "kill",
+      "tone": "grey",
+      "text": "liq $11.9K",
+      "coin": "Hippos"
+    }
+  ],
+  "source": "paper-night",
+  "emptyText": null
+}

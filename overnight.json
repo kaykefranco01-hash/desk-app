@@ -1,9 +1,18 @@
 {
-  "nights": [],
+  "nights": [
+    {
+      "date": "2026-11-22",
+      "label": "22/11",
+      "pnl": 0.0,
+      "trades": 0,
+      "start": "22:00",
+      "end": "07:00"
+    }
+  ],
   "window": {
     "start": "22:00",
     "end": "06:30"
   },
-  "empty": true,
+  "empty": false,
   "emptyText": "Primeira noite hoje 22:00–06:30"
 }

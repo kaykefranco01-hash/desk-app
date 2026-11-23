@@ -143,6 +143,31 @@
     let fs = 64; while (el.scrollWidth > room && fs > 40) { fs -= 2; el.style.fontSize = fs + 'px'; }
   }
   addEventListener('resize', fitBalance);
+  let balTween = 0;
+  function tweenBalance(next) {
+    const el = $('balance'); if (!el) return;
+    const to = Number(next);
+    const from = (el.dataset.n != null && isFinite(Number(el.dataset.n))) ? Number(el.dataset.n) : to;
+    el.dataset.n = isFinite(to) ? String(to) : '';
+    el.classList.remove('flash-up', 'flash-down');
+    if (isFinite(from) && isFinite(to) && to !== from) {
+      el.classList.add(to > from ? 'flash-up' : 'flash-down');
+      clearTimeout(el._flashT);
+      el._flashT = setTimeout(() => el.classList.remove('flash-up', 'flash-down'), 900);
+    }
+    cancelAnimationFrame(balTween);
+    if (RM() || !isFinite(from) || !isFinite(to) || from === to) {
+      odometer(el, isFinite(to) ? usdHero(to) : '—'); fitBalance(); return;
+    }
+    const t0 = performance.now(), DUR = 480;
+    const step = now => {
+      const p = Math.min(1, (now - t0) / DUR);
+      const e = 1 - Math.pow(1 - p, 3);
+      odometer(el, usdHero(from + (to - from) * e)); fitBalance();
+      if (p < 1) balTween = requestAnimationFrame(step);
+    };
+    balTween = requestAnimationFrame(step);
+  }
 
   // ---------- navigation ----------
   const stack = []; let tab = 'home';
@@ -181,7 +206,18 @@
   $('ranges').querySelectorAll('button').forEach(b => { b.dataset.range = b.dataset.r; });
 
   let toastT = 0;
-  function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2200); }
+  function toast(msg) {
+    const t = $('toast'); if (!t || msg == null || msg === '') return;
+    t.textContent = msg; t.hidden = false;
+    t.classList.remove('in', 'out');
+    if (!RM()) { void t.offsetWidth; t.classList.add('in'); }
+    clearTimeout(toastT);
+    toastT = setTimeout(() => {
+      if (RM()) { t.hidden = true; t.classList.remove('in'); return; }
+      t.classList.remove('in'); t.classList.add('out');
+      toastT = setTimeout(() => { t.hidden = true; t.classList.remove('out'); }, 340);
+    }, 2000);
+  }
   async function invite(url) {
     if (!safe(url)) return;
     try { if (navigator.share) { await navigator.share({url}); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
@@ -345,7 +381,7 @@
   let drawnRange = null;
   function drawChart(c, fresh) {
     const reveal = fresh || drawnRange !== range; drawnRange = range;
-    window.DeskChart.line($('chart'), c, {reveal, head: $('chart-head')});
+    window.DeskChart.line($('chart'), c, {reveal, head: $('chart-head'), pan: range === 'LIVE' && c.xMin == null});
     if (range === 'LIVE') profitCheck('chart', (c.marks || []).filter(m => m.kind !== 'bought' && Number(m.usd != null ? m.usd : /^\+/.test(m.label || '') ? 1 : -1) > 0).map(m => 'a:' + (m.mint || '') + ':m' + Math.round(m.ts)));
     $('chart-empty').textContent = c.empty || 'À espera do primeiro trade';
     $('chart-empty').hidden = !c.empty && (c.points || []).length > 1;
@@ -360,7 +396,7 @@
     const m = $('mult'); m.classList.remove('skel-i'); m.textContent = Number(mult || 1).toFixed(2) + '×'; m.classList.toggle('down', !up);
   }
   function renderState(s) {
-    odometer($('balance'), usdHero(s.balance));
+    if (!replayOn) tweenBalance(s.balance);
     const mode = s.mode === 'DEMO' ? 'DEMO' : s.mode === 'LIVE' ? 'LIVE' : 'PAPER';
     const fresh = Math.abs(Date.now() - new Date(s.ts).getTime()) < STATE_S * 4000;
     const mp = $('paper');
@@ -447,6 +483,15 @@
   // ---------- LIVE HOME (state.live): bot rows + activity feed, all from desk.db rows on the server ----------
   const HOT_S = 15;            // a bot acted since the previous snapshot (the desk writes one every ~15 s)
   const BADGE = {scanner: 'A ler', auditor: 'A auditar', analyst: 'A pontuar', executor: 'A comprar', risk: 'A vigiar', brain: 'A aprender', discover: 'A procurar'};
+  const WORK = {scanner: 'A ler Discover…', auditor: 'A auditar…', analyst: 'A pontuar…', executor: 'A dimensionar…', risk: 'A vigiar…', brain: 'A aprender…', discover: 'A procurar…'};
+  function botVerb(a, b, hot) {
+    b = b || {};
+    if (b.paused) return {dot: 'paused', text: 'pausado'};
+    if (hot) return {dot: 'on', text: (b.text || WORK[a] || 'À espera')};
+    if (b.waiting) return {dot: 'wait', text: 'À espera'};
+    if (!b.running) return {dot: 'stop', text: 'parado (sem sinal)'};
+    return {dot: 'wait', text: 'À espera'};
+  }
   const UNIT = {scanner: 'hoje', auditor: 'hoje', executor: 'trades', brain: 'lições', discover: 'traders'};
   let liveRows = null, liveEpoch = 0;
   const whenTxt = iso => {
@@ -475,11 +520,12 @@
   function botRowHtml(a, b) {
     b = b || {};
     const off = ringOffset(a, b);
-    const idle = b.paused ? 'pausado' : (b.running ? 'à espera' : 'parado (sem sinal)');
-    const tx = `${b.coin ? `${av(b.coin, b.image, b.mint, 'xs')}<b>${esc(b.coin)}</b> ` : ''}${esc(b.text || idle)}`;
-    return `<button class="bot-row${b.running && !b.paused ? ' on' : ' off'}" style="--ac:${AC[a]}" data-a="${a}" data-go="agents" data-anchor="ag-${a}">
+    const hot = !!b.hot;
+    const st = botVerb(a, b, hot);
+    const tx = `${(hot && b.coin) ? `${av(b.coin, b.image, b.mint, 'xs')}<b>${esc(b.coin)}</b> ` : ''}${esc(st.text)}`;
+    return `<button class="bot-row${hot ? ' on hot' : (st.dot === 'wait' ? ' on' : ' off')}" style="--ac:${AC[a]}" data-a="${a}" data-go="agents" data-anchor="ag-${a}">
       <span class="bot-ava"><svg class="bot-ring" viewBox="0 0 36 36" aria-hidden="true"><circle class="bot-ring-bg" cx="18" cy="18" r="15" fill="none" stroke-width="2.4"/><circle class="bot-ring-fg" cx="18" cy="18" r="15" fill="none" stroke-width="2.4" stroke-dasharray="${RING.toFixed(2)}" stroke-dashoffset="${off.toFixed(2)}" pathLength="${RING.toFixed(2)}"/></svg>${icon(a)}</span>
-      <span class="bot-mid"><span class="bot-nm"><i class="hb ${b.paused ? 'paused' : b.running ? 'on' : ''}"></i>${esc(NAMES[a] || a)}</span>
+      <span class="bot-mid"><span class="bot-nm"><i class="hb ${st.dot}"></i>${esc(NAMES[a] || a)}</span>
       <span class="bot-ln">${tx}</span></span>
       <span class="bot-val num">${metricHtml(a, b)}</span></button>`;
   }
@@ -508,10 +554,10 @@
         const age = b.lastTs ? liveEpoch - b.lastTs : null;
         const on = b.running && !b.paused;
         const hot = on && ((age != null && age >= -2 && age < HOT_S) || (a === 'risk' && b.guarding > 0));
-        row.classList.toggle('hot', hot); row.classList.toggle('on', on); row.classList.toggle('off', !on);
-        const hb = row.querySelector('.hb'); if (hb) hb.className = 'hb ' + (b.paused ? 'paused' : b.running ? 'on' : '');
-        const idle = b.paused ? 'pausado' : (b.running ? '' : 'parado (sem sinal)');
-        const tx = `${b.coin ? `${av(b.coin, b.image, b.mint, 'xs')}<b>${esc(b.coin)}</b> ` : ''}<span class="${b.tone === 'red' ? 'red' : b.tone === 'green' ? 'green' : b.tone === 'blue' ? 'ac' : ''}">${esc(b.text || idle || 'à espera')}</span>`;
+        const st = botVerb(a, b, hot);
+        row.classList.toggle('hot', hot); row.classList.toggle('on', st.dot === 'on' || st.dot === 'wait'); row.classList.toggle('off', st.dot === 'stop');
+        const hb = row.querySelector('.hb'); if (hb) hb.className = 'hb ' + st.dot;
+        const tx = `${(hot && b.coin) ? `${av(b.coin, b.image, b.mint, 'xs')}<b>${esc(b.coin)}</b> ` : ''}<span class="${hot && b.tone === 'red' ? 'red' : hot && b.tone === 'green' ? 'green' : hot && b.tone === 'blue' ? 'ac' : ''}">${esc(st.text)}</span>`;
         const el = row.querySelector('.bot-ln'); if (el && el.dataset.k !== tx) { el.dataset.k = tx; el.innerHTML = tx; flash(el); }
         const mh = metricHtml(a, b), m = row.querySelector('.bot-val');
         if (m && m.dataset.k !== mh) { const first = !m.dataset.k; m.dataset.k = mh; m.innerHTML = mh; if (!first) flash(m); }
@@ -557,8 +603,10 @@
       val = e.kind === 'bought' ? usd(e.usd) : (e.usd >= 0 ? '+' : '-') + usd(Math.abs(e.usd)).replace('-', '');
     } else if (['kill', 'rejected', 'refused', 'skipped'].includes(e.kind)) {
       val = 'Skipped';
+      cls = 'skip';
     }
-    return `<${tag} class="item act${enter ? ' enter' : ''}" data-id="${esc(e.id)}" ${attr}>
+    const skip = ['kill', 'rejected', 'refused', 'skipped'].includes(e.kind);
+    return `<${tag} class="item act${enter ? ' enter' : ''}${skip ? ' skip' : ''}" data-id="${esc(e.id)}" ${attr}>
       <span class="act-av">${av(e.coin || e.text, e.image, e.mint)}${actBadge(e.kind === 'kill' || e.kind === 'refused' ? 'skipped' : e.kind)}</span>
       <span class="mid"><div class="t">${esc(title)}</div><div class="s">${esc(sub)}</div></span>
       <span class="v num ${cls}">${esc(val)}</span></${tag}>`;
@@ -585,8 +633,34 @@
     if (box.querySelector('.empty-row')) box.innerHTML = '';
     if (e.actor === 'auditor') box.querySelectorAll('.fd').forEach(r => { if (r.dataset.audit === e.mint && !r.dataset.coin) r.remove(); });
     box.insertAdjacentHTML('afterbegin', feedRow(e, !RM()));
+    onActivityEvent(e);
     while (box.children.length > FEED_N) box.lastElementChild.remove();
     feedT = setTimeout(pumpFeed, RM() ? 0 : Math.max(250, Math.min(900, 4000 / (feedQ.length + 1))));
+  }
+
+  function onActivityEvent(e) {
+    const coin = e.coin || '';
+    if (e.kind === 'bought' || e.kind === 'buy') {
+      dropLivePill(coin ? ('Comprou ' + coin) : 'Comprou', e.actor);
+      toast(coin ? ('Comprou ' + coin) : 'Comprou');
+    } else if (['sold', 'partial', 'stopped'].includes(e.kind)) {
+      dropLivePill(coin ? ('Vendeu ' + coin) : 'Vendeu', e.actor);
+      toast(coin ? ('Vendeu ' + coin) : 'Vendeu');
+    } else if (['kill', 'rejected', 'refused', 'skipped'].includes(e.kind)) {
+      dropLivePill(coin ? ('Saltou ' + coin) : 'Saltou', e.actor);
+    }
+  }
+  function dropLivePill(text, actor) {
+    const box = $('live-pills'); if (!box || !text) return;
+    const el = document.createElement('div');
+    el.className = 'live-pill';
+    el.style.setProperty('--ac', (ACTOR_C[actor] || '#30d158'));
+    const dot = document.createElement('i');
+    el.appendChild(dot);
+    el.appendChild(document.createTextNode(text));
+    box.appendChild(el);
+    setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, RM() ? 50 : 3400);
+    while (box.children.length > 3) box.removeChild(box.firstChild);
   }
 
   // Pilot problems on Home too (same data as the Account tab, account.json): the brake line and a persistent error.
@@ -977,7 +1051,7 @@
 
   // ---------- refresh loop ----------
   async function refreshScreen(first) {
-    if (!D) return;
+    if (!D || replayOn) return;
     const v = visible(), top = stack[stack.length - 1];
     try {
       if (v === 'tab-home') { if (cache.state) renderState(cache.state); await loadChart(); renderHomeActivity(await tryGet('activity')); homeAlert(); }
@@ -996,6 +1070,7 @@
     clearTimeout(stateT);
     try {
       const s = await get('state');
+      if (replayOn) { lastOk = new Date(s.ts); offline = false; failN = 0; errRow(); stateT = setTimeout(pollState, HOME_POLL_S * 1000); return; }
       try { renderState(s); } catch (err) { console.error(err); }
       const age = (Date.now() - new Date(s.ts).getTime()) / 1000;
       if (age > STATE_S * 4) throw new Error('stale');
@@ -1014,7 +1089,7 @@
       const e = await get('events');
       if (e.lastSeq !== lastSeq) {
         const fresh = (e.events || []).filter(x => x.seq > lastSeq); lastSeq = e.lastSeq;
-        if (!demoOn() && fresh.some(x => x.kind === 'balance')) { const b = fresh.filter(x => x.kind === 'balance').pop(); if (cache.state && b.value != null) { odometer($('balance'), usd(b.value)); fitBalance(); } }
+        if (!demoOn() && !replayOn && fresh.some(x => x.kind === 'balance')) { const b = fresh.filter(x => x.kind === 'balance').pop(); if (cache.state && b.value != null) { tweenBalance(b.value); } }
         renderBellDot();
         const v = visible(), top = stack[stack.length - 1];
         if (v === 'scr-audit' && fresh.some(x => x.kind === 'audit_layer' && top && x.mint === top.arg)) renderAudit(top.arg);
@@ -1215,6 +1290,123 @@
   }
 
 
+  // Replay da noite: plays the last published REAL series (night-replay.json) through the same components.
+  let replayOn = false, replayT = 0;
+  function replayBtnState() {
+    const b = $('btn-replay'), data = cache.replay, bn = $('replay-banner');
+    const can = !!(data && data.hasReplay);
+    if (b) {
+      b.disabled = !can;
+      b.setAttribute('aria-disabled', can ? 'false' : 'true');
+      b.classList.toggle('on', replayOn);
+      b.textContent = replayOn ? 'Replay · acelerado' : 'Replay da noite';
+    }
+    if (bn) { bn.hidden = !replayOn; bn.textContent = 'Replay · acelerado'; }
+  }
+  async function pollReplay() {
+    try {
+      const r = await fetch('night-replay.json?t=' + Date.now(), {cache: 'no-store', referrerPolicy: 'no-referrer'});
+      if (r.ok) cache.replay = await r.json();
+    } catch (e) { /* keep last */ }
+    if (!replayOn) replayBtnState();
+    setTimeout(pollReplay, STATE_S * 1000);
+  }
+  function stopReplay(restore) {
+    cancelAnimationFrame(replayT); replayT = 0; replayOn = false;
+    replayBtnState();
+    if (restore) {
+      feedShown = null; feedQ = []; if (feedT) { clearTimeout(feedT); feedT = 0; }
+      if (D && cache.state) {
+        renderState(cache.state);
+        if (cache['chart/' + range]) drawChart(cache['chart/' + range], true);
+        else loadChart();
+      }
+    }
+  }
+  function startReplay() {
+    const data = cache.replay;
+    if (!data || !data.hasReplay || replayOn) return;
+    const points = data.points || [];
+    const events = (data.events || []).slice().sort((a, b) => a.ts - b.ts);
+    if (!events.length && points.length < 2 && !(points.length && data.startBalance != data.endBalance)) return;
+    replayOn = true; replayBtnState();
+    feedShown = new Set(); feedQ = []; if (feedT) { clearTimeout(feedT); feedT = 0; }
+    if ($('home-activity')) $('home-activity').innerHTML = '';
+    const t0 = Number(data.t0);
+    const lastE = events.length ? events[events.length - 1].ts : t0;
+    const lastP = points.length ? points[points.length - 1][0] : t0;
+    const t1 = Math.max(Number(data.t1 || t0), lastE, lastP, t0 + 1);
+    const dur = Math.max(8, Math.min(30, Number(data.windowS || 25))) * 1000;
+    const startBal = data.startBalance != null ? Number(data.startBalance) : (points[0] ? points[0][1] : 0);
+    tweenBalance(startBal);
+    pnlRow(startBal, startBal, 0, 1);
+    const bots = {};
+    ORDER.forEach(a => { bots[a] = {waiting: true, running: false, paused: false, hot: false, text: 'À espera'}; });
+    if ($('ag-rows')) $('ag-rows').innerHTML = ORDER.map(a => botRowHtml(a, bots[a])).join('');
+    const botClear = {};
+    function paintBots(nowMs) {
+      const box = $('ag-rows'); if (!box) return;
+      for (const a of ORDER) {
+        if (botClear[a] && nowMs > botClear[a]) { bots[a].hot = false; bots[a].text = 'À espera'; bots[a].waiting = true; bots[a].running = false; }
+        const b = bots[a], row = box.querySelector('[data-a="' + a + '"]'); if (!row) continue;
+        const st = botVerb(a, b, !!b.hot);
+        row.classList.toggle('hot', !!b.hot); row.classList.toggle('on', st.dot === 'on' || st.dot === 'wait'); row.classList.toggle('off', st.dot === 'stop');
+        const hb = row.querySelector('.hb'); if (hb) hb.className = 'hb ' + st.dot;
+        const tx = (b.hot && b.coin) ? (b.coin + ' · ' + st.text) : st.text;
+        const el = row.querySelector('.bot-ln');
+        if (el && el.dataset.k !== tx) { el.dataset.k = tx; el.textContent = tx; }
+      }
+    }
+    function balAt(t) {
+      if (!points.length) return startBal;
+      let last = points[0][1];
+      for (let i = 0; i < points.length; i++) { if (points[i][0] <= t) last = points[i][1]; else break; }
+      return last;
+    }
+    function chartAt(t) {
+      const pts = points.filter(p => p[0] <= t);
+      const series = pts.length ? pts.slice() : (points[0] ? [[t0, points[0][1]]] : []);
+      if (series.length === 1 && t > series[0][0]) series.push([t, series[0][1]]);
+      window.DeskChart.line($('chart'), {points: series, startValue: startBal, xMin: t0, xMax: t1}, {reveal: false, head: $('chart-head')});
+      const empty = $('chart-empty');
+      if (empty) { empty.textContent = series.length < 2 ? 'À espera do primeiro trade' : ''; empty.hidden = series.length > 1; }
+    }
+    let ei = 0, lastBal = startBal;
+    const tStart = performance.now();
+    function frame(now) {
+      if (!replayOn) return;
+      const p = RM() ? 1 : Math.min(1, (now - tStart) / dur);
+      const t = t0 + p * (t1 - t0);
+      const bal = balAt(t);
+      if (bal !== lastBal) {
+        tweenBalance(bal);
+        const pct = startBal ? ((bal / startBal - 1) * 100) : 0;
+        pnlRow(bal, startBal, pct, startBal ? (bal / startBal) : 1);
+        lastBal = bal;
+      }
+      chartAt(t);
+      while (ei < events.length && events[ei].ts <= t) {
+        const e = events[ei++];
+        if (!feedShown) feedShown = new Set();
+        if (!feedShown.has(e.id)) { feedShown.add(e.id); feedQ.push(e); if (!feedT) pumpFeed(); }
+        const a = e.actor;
+        if (bots[a]) {
+          bots[a].hot = true; bots[a].waiting = false;
+          bots[a].text = e.text || WORK[a] || 'À espera';
+          bots[a].coin = e.coin; bots[a].mint = e.mint;
+          botClear[a] = now + 1600;
+        }
+      }
+      paintBots(now);
+      if (p < 1) replayT = requestAnimationFrame(frame);
+      else stopReplay(true);
+    }
+    paintBots(performance.now());
+    chartAt(t0);
+    replayT = requestAnimationFrame(frame);
+  }
+  if ($('btn-replay')) $('btn-replay').onclick = () => { if (!cache.replay || !cache.replay.hasReplay) return; if (replayOn) stopReplay(true); else startReplay(); };
+
   // Live screen (t374u): public frame + caption published by ops/live_screen_capture.py. Never a secret path.
   const LIVE_MAX_AGE_S = 15 * 60;
   const LIVE_CAPTION_URL = 'https://raw.githubusercontent.com/kaykefranco01-hash/desk-app/live-screen/live/caption.json';
@@ -1277,6 +1469,10 @@
   // ---------- start ----------
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
   renderRanges();
+  pollOvernight();
+  pollReplay();
+  pollLiveScreen();
+  pollTokenImages();
   if (!D) {
     offline = true; errRow();
     // iOS keeps home-screen storage apart from Safari: the owner pastes the desk link once.
@@ -1287,12 +1483,13 @@
       const tm = v.match(/[#&?]t=([A-Za-z0-9_\-]{20,200})/);
       if (tm) localStorage.setItem('desk_t', tm[1]);
       if (mm) { localStorage.setItem('desk_d', mm[1]); location.reload(); } else toast('That is not a desk link'); });
-    loadingLayout(); $('balance').textContent = '—'; $('balance').classList.remove('skel');
+    $('balance').textContent = '—'; $('balance').classList.remove('skel');
     $('today').textContent = ''; $('mult').hidden = true; if ($('agents-running')) { $('agents-running').textContent = '—'; $('agents-running').classList.remove('skel-i'); }
     if ($('nights-box')) renderNights({});
-    if ($('home-activity')) $('home-activity').innerHTML = '<div class="empty-row">Open your desk link once on this device</div>';
-    if ($('ag-rows')) $('ag-rows').innerHTML = ''; return;
+    if ($('home-activity')) $('home-activity').innerHTML = '<div class="empty-row">Abre o link da mesa para o ao vivo, ou carrega em Replay da noite.</div>';
+    if ($('ag-rows')) $('ag-rows').innerHTML = '';
+    return;
   }
   loadingLayout();
-  pollState().then(() => { refreshScreen(); tryGet('index').catch(() => {}); pollEvents(); pollDemo(); pollOvernight(); pollLiveScreen(); pollTokenImages().then(() => refreshScreen()); });
+  pollState().then(() => { refreshScreen(); tryGet('index').catch(() => {}); pollEvents(); pollDemo(); pollTokenImages().then(() => refreshScreen()); });
 })();

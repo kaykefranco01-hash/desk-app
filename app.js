@@ -1408,21 +1408,31 @@
   if ($('btn-replay')) $('btn-replay').onclick = () => { if (!cache.replay || !cache.replay.hasReplay) return; if (replayOn) stopReplay(true); else startReplay(); };
 
   // Live screen (t374u / t390u): public frame + caption from the live-screen branch.
-  // raw.githubusercontent.com caches a stable branch URL for ~5 min and ignores ?t=.
-  // The capturer also writes live/p/<15s-bucket>.json and .jpg (new path = CDN miss).
-  // SHA URLs are immediate too, but we do not poll api.github.com (60 req/h/IP).
+  // raw.githubusercontent.com caches the branch tip for ~5 min (and caches 404s), so
+  // the app loads caption + frame by commit sha. SHA URLs are fresh immediately after push.
+  // The sha comes from api.github.com refs (CORS, typically fresh). We poll it at most
+  // every 75 s to stay under the unauth 60 req/h/IP cap (48 req/h with margin; one phone).
   const LIVE_MAX_AGE_S = 3 * 60;
   const LIVE_POLL_S = 15;
-  const LIVE_BUCKET_S = 15;
+  const LIVE_SHA_POLL_S = 75;
   const LIVE_REPO = 'kaykefranco01-hash/desk-app';
   const LIVE_BRANCH = 'live-screen';
   const LIVE_RAW = 'https://raw.githubusercontent.com/' + LIVE_REPO + '/';
+  const LIVE_SHA_URL = 'https://api.github.com/repos/kaykefranco01-hash/desk-app/git/refs/heads/live-screen';
   const LIVE_AC = {scanner: '#0a84ff', auditor: '#bf5af2', analyst: '#30d158', executor: '#ff9f0a', risk: '#ff453a', brain: '#5e5ce6', discover: '#64d2ff'};
-  function livePtrBuckets(nowS) {
-    const cur = Math.floor(nowS / LIVE_BUCKET_S) * LIVE_BUCKET_S;
-    const out = [];
-    for (let i = -1; i <= Math.ceil(LIVE_MAX_AGE_S / LIVE_BUCKET_S); i++) out.push(cur - i * LIVE_BUCKET_S);
-    return out;
+  let liveSha = '';
+  let liveShaAt = 0;
+  async function resolveLiveSha() {
+    const now = Date.now();
+    if (liveSha && now - liveShaAt < LIVE_SHA_POLL_S * 1000) return liveSha;
+    try {
+      const r = await fetch(LIVE_SHA_URL, {cache: 'no-store', referrerPolicy: 'no-referrer', headers: {Accept: 'application/vnd.github+json'}});
+      if (r.status === 403 || r.status === 429) return liveSha;
+      const d = r.ok ? await r.json() : null;
+      const sha = d && d.object ? String(d.object.sha || '') : '';
+      if (/^[0-9a-f]{40}$/.test(sha)) { liveSha = sha; liveShaAt = now; return sha; }
+    } catch (e) { /* keep last sha */ }
+    return liveSha;
   }
   async function fetchCaption(url) {
     const r = await fetch(url, {cache: 'no-store', referrerPolicy: 'no-referrer'});
@@ -1433,23 +1443,16 @@
     return null;
   }
   async function resolveLiveCaption() {
-    const buckets = livePtrBuckets(Date.now() / 1000);
-    const branch = LIVE_RAW + LIVE_BRANCH + '/';
-    // Newest first, 4 at a time, so a fresh pointer is found in one or two rounds.
-    for (let i = 0; i < buckets.length; i += 4) {
-      const slice = buckets.slice(i, i + 4);
-      const found = await Promise.all(slice.map(async b => {
-        try {
-          const got = await fetchCaption(branch + 'live/p/' + b + '.json');
-          return got ? {bucket: b, ...got} : null;
-        } catch (e) { return null; }
-      }));
-      const hit = found.filter(Boolean).sort((a, b) => Number(b.j.epoch) - Number(a.j.epoch))[0];
-      if (hit) return {src: branch + 'live/p/' + hit.bucket + '.jpg', ...hit};
+    const sha = await resolveLiveSha();
+    if (sha) {
+      try {
+        const got = await fetchCaption(LIVE_RAW + sha + '/live/caption.json');
+        if (got) return {src: LIVE_RAW + sha + '/live/frame.jpg', ...got};
+      } catch (e) { /* fallback */ }
     }
     try {
-      const got = await fetchCaption(branch + 'live/caption.json');
-      if (got) return {src: branch + 'live/frame.jpg', bucket: 0, ...got};
+      const got = await fetchCaption(LIVE_RAW + LIVE_BRANCH + '/live/caption.json');
+      if (got) return {src: LIVE_RAW + LIVE_BRANCH + '/live/frame.jpg', bucket: 0, ...got};
     } catch (e) { /* placeholder */ }
     return null;
   }

@@ -1465,12 +1465,32 @@
     if (/^#[0-9a-fA-F]{6}$/.test(c || '')) return c;
     return LIVE_AC[actor] || '#30d158';
   }
+  let liveBlobUrl = '';
   function showLivePlaceholder() {
     const img = $('live-frame'), ph = $('live-ph'), cap = $('live-cap'), badge = $('live-badge');
     if (img) { img.removeAttribute('src'); img.hidden = true; }
     if (ph) ph.hidden = false;
     if (cap) cap.textContent = '';
     if (badge) { badge.hidden = true; badge.textContent = ''; badge.style.removeProperty('--ac'); }
+    if (liveBlobUrl) { URL.revokeObjectURL(liveBlobUrl); liveBlobUrl = ''; }
+  }
+  async function showLiveFrame(img, ph, src) {
+    // Direct <img src=raw.githubusercontent> onerrors in Chrome (even with image/jpeg + CORS).
+    // fetch() + blob: URL loads the same bytes reliably.
+    const r = await fetch(src, {cache: 'no-store', referrerPolicy: 'no-referrer'});
+    if (!r.ok) throw new Error('frame');
+    const blob = await r.blob();
+    if (blob.size < 1000) throw new Error('frame');
+    const url = URL.createObjectURL(blob);
+    await new Promise((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error('frame'));
+      if (liveBlobUrl) URL.revokeObjectURL(liveBlobUrl);
+      liveBlobUrl = url;
+      img.src = url;
+    });
+    img.hidden = false;
+    ph.hidden = true;
   }
   async function pollLiveScreen() {
     const img = $('live-frame'), ph = $('live-ph'), cap = $('live-cap'), badge = $('live-badge');
@@ -1480,14 +1500,7 @@
       const got = await resolveLiveCaption();
       if (got) {
         const j = got.j, age = got.age, src = got.src;
-        const show = () => { if (img.getAttribute('src') !== src) img.src = src; img.hidden = false; ph.hidden = true; };
-        if (img.getAttribute('src') === src && img.naturalWidth > 0) show();
-        else {
-          const probe = new Image();
-          probe.onload = show;
-          probe.onerror = () => { if (!img.naturalWidth) showLivePlaceholder(); };
-          probe.src = src;
-        }
+        await showLiveFrame(img, ph, src);
         const label = j.actor_label || '';
         if (cap) {
           const bits = [];

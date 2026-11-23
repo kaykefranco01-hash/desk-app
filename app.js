@@ -1474,7 +1474,7 @@
   pollLiveScreen();
   pollTokenImages();
   if (!D) {
-    offline = true; errRow();
+    // Public page works without the desk link (nights, live screen, Replay). The paste box is enough; no offline error.
     // iOS keeps home-screen storage apart from Safari: the owner pastes the desk link once.
     const box = document.createElement('div'); box.className = 'group'; box.id = 'paste-box';
     box.innerHTML = '<div class="row"><input id="paste" placeholder="Paste your desk link" autocomplete="off" autocapitalize="off" spellcheck="false" style="flex:1;min-height:44px;background:none;border:0;color:#fff;font:inherit"></div>';

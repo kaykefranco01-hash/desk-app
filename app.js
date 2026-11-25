@@ -97,7 +97,7 @@
     const sec = Math.max(0, Math.floor(Date.now() / 1000 - st.started_at));
     $('#elapsed').textContent = [sec / 3600, sec / 60 % 60, sec % 60].map(v => String(Math.floor(v)).padStart(2, '0')).join(':');
     $('#working').classList.toggle('idle', !st.in_window); $('#working-label').textContent = st.in_window ? 'Working' : 'Waiting for night';
-    const fresh = st.last_frame_at && (Date.now() / 1000 - st.last_frame_at) < 5;
+    const fresh = st.last_frame_at && (Date.now() / 1000 - st.last_frame_at) < (PLANB ? 60 : 5);
     $('#live-dot').className = 'dot ' + (fresh ? 'red' : 'grey');
     $('#live-label').textContent = fresh ? "Live · Bot's computer" : (st.last_frame_at ? 'Last frame ' + hm(st.last_frame_at) : "Bot's computer");
     $('#lane').textContent = st.lane || 'Idle'; $('#lane').style.color = st.lane_bot ? COLORS[st.lane_bot] : '';
@@ -121,11 +121,19 @@
 
   // double buffered screen
   let front = 'a';
+  // GitHub raw images are blocked as <img> cross-origin on some browsers (ORB): load them through fetch -> blob.
+  function setImg(img, url) {
+    if (!url) return;
+    if (!GH) { img.src = url; return; }
+    fetch(url, { cache: 'no-store', referrerPolicy: 'no-referrer' }).then(r => r.ok ? r.blob() : null).then(b => {
+      if (!b) return; const old = img.dataset.obj; img.src = URL.createObjectURL(b); img.dataset.obj = img.src; if (old) setTimeout(() => URL.revokeObjectURL(old), 2000);
+    }).catch(() => { });
+  }
   function loadScreen() {
     if (!lastState || !lastState.last_frame_at || lastState.private) return;
     const back = front === 'a' ? 'b' : 'a', img = $('#screen-' + back);
     img.onload = () => { img.classList.remove('back'); $('#screen-' + front).classList.add('back'); front = back; };
-    img.src = screenUrl();
+    setImg(img, screenUrl());
   }
   $('#screen-wrap').onclick = () => openScreen();
 
@@ -236,7 +244,7 @@
 
   // ---------- overlays ----------
   function overlay(html) { $('#overlay-body').innerHTML = `<button class="link" id="ov-close">‹ Back</button>` + html; $('#overlay').hidden = false; $('#ov-close').onclick = () => $('#overlay').hidden = true; }
-  function openScreen() { overlay(`<div class="screen-wrap" style="margin-top:8px;border-radius:12px;overflow:hidden;touch-action:pinch-zoom"><img src="${screenUrl()}" style="object-fit:contain"></div><a class="btn ghost" style="display:flex;align-items:center;justify-content:center;text-decoration:none" href="${lastState && lastState.positions[0] ? esc(lastState.positions[0].link) : 'https://fomo.family/r/profeta7zz'}" target="_blank" rel="noopener">Open on FOMO</a>`); }
+  function openScreen() { overlay(`<div class="screen-wrap" style="margin-top:8px;border-radius:12px;overflow:hidden;touch-action:pinch-zoom"><img id="ov-screen" style="object-fit:contain"></div><a class="btn ghost" style="display:flex;align-items:center;justify-content:center;text-decoration:none" href="${lastState && lastState.positions[0] ? esc(lastState.positions[0].link) : 'https://fomo.family/r/profeta7zz'}" target="_blank" rel="noopener">Open on FOMO</a>`); setImg($('#ov-screen'), screenUrl()); }
   async function openCoin(mint) {
     overlay('<div class="empty">Loading…</div>');
     try { const d = await api('/coin/' + mint); const c = d.coin || {}, p = d.position;

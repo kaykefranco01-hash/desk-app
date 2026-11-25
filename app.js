@@ -68,6 +68,19 @@
   const hm = ts => new Date(ts * 1000).toTimeString().slice(0, 5);
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const ago = ts => { const s = Date.now() / 1000 - ts; return s < 60 ? Math.round(s) + 's ago' : s < 3600 ? Math.round(s / 60) + 'm ago' : Math.round(s / 3600) + 'h ago'; };
+  const safeImg = u => (typeof u === 'string' && /^https:\/\//.test(u) && u.length < 500 && !/\s/.test(u)) ? u : null;
+  const initial = (name, mint) => {
+    const s = String(name || mint || '?').replace(/^[^A-Za-z0-9]+/, '');
+    const ch = (s[0] || '?').toUpperCase();
+    return /[A-Z0-9]/.test(ch) ? ch : '?';
+  };
+  function av(name, img, mint, cls) {
+    const u = safeImg(img), ch = initial(name, mint);
+    let h = 0; for (const x of String(mint || name || '')) h = (h * 31 + x.charCodeAt(0)) >>> 0;
+    const bg = `background:hsl(${h % 360} 55% 38%)`;
+    if (!u) return `<span class="cav ${cls || ''}" style="${bg}">${ch}</span>`;
+    return `<span class="cav ${cls || ''}" style="${bg}"><img src="${esc(u)}" alt="" referrerpolicy="no-referrer" loading="lazy" onerror="this.style.display='none';this.parentNode.appendChild(document.createTextNode('${ch}'))"></span>`;
+  }
 
   // ---------- odometer ----------
   function odometer(el, value) {
@@ -103,8 +116,17 @@
     $('#lane').textContent = st.lane || 'Idle'; $('#lane').style.color = st.lane_bot ? COLORS[st.lane_bot] : '';
     $('#screen-private').hidden = !st.private; $('#screen-empty').hidden = !!st.last_frame_at || st.private;
     const o = st.last_order;
-    $('#last-order').innerHTML = o ? `${o.side === 'buy' ? 'Bought' : 'Sold'} ${esc(o.symbol || o.mint.slice(0, 4))} · ${money(o.fill_usd || o.usd)} · ${o.mode === 'PAPER' ? 'PAPER' : (o.status === 'done' ? 'verified' : esc(o.status))} <span class="checks">${o.mode === 'PAPER' ? '' : [o.screen_ok, o.api_ok, o.chain_ok].map(x => x ? '✓' : '·').join('')}</span>` : 'No orders yet';
+    $('#last-order').innerHTML = o ? `${av(o.symbol, o.image, o.mint, 'sm')}<span>${o.side === 'buy' ? 'Bought' : 'Sold'} ${esc(o.symbol || o.mint.slice(0, 4))} · ${money(o.fill_usd || o.usd)} · ${o.mode === 'PAPER' ? 'PAPER' : (o.status === 'done' ? 'verified' : esc(o.status))} <span class="checks">${o.mode === 'PAPER' ? '' : [o.screen_ok, o.api_ok, o.chain_ok].map(x => x ? '✓' : '·').join('')}</span></span>` : 'No orders yet';
     $('#bots-head').textContent = `Bots · ${Object.keys(COLORS).filter(b => st.heartbeats && st.heartbeats[b] && Date.now() / 1000 - st.heartbeats[b] < 120).length} running`;
+    const pos = st.positions || [];
+    $('#open-pos-wrap').hidden = !pos.length;
+    if (pos.length) {
+      $('#open-pos').innerHTML = pos.map(p => {
+        const pnl = p.pnl_pct, cls = pnl == null ? '' : pnl >= 0 ? 'green' : 'red';
+        return `<div class="row" data-mint="${esc(p.mint)}">${av(p.symbol, p.image, p.mint)}<div class="mid"><div>${esc(p.symbol)}</div><div>${money(p.size_usd)} in${p.price != null ? ' · $' + Number(p.price).toPrecision(4) : ''}</div></div><div class="val ${cls}">${pnl == null ? '—' : (pnl >= 0 ? '+' : '') + Number(pnl).toFixed(1) + '%'}</div></div>`;
+      }).join('');
+      $('#open-pos').querySelectorAll('.row').forEach(row => row.onclick = () => openCoin(row.dataset.mint));
+    }
   }
   function renderError() {
     failN++; const n = Math.min(30, 2 * failN);
@@ -151,7 +173,8 @@
         box.appendChild(div); });
       while (box.children.length > 200) box.firstChild.remove();
       box.scrollTop = box.scrollHeight;
-      const last = rows[rows.length - 1]; botIcons(last.bot); $('#term-coin').textContent = last.symbol ? last.symbol + (last.mint ? ' ' + last.mint.slice(0, 4) + '…' + last.mint.slice(-4) : '') : '—';
+      const last = rows[rows.length - 1]; botIcons(last.bot);
+      $('#term-coin').innerHTML = last.symbol ? `${av(last.symbol, last.image, last.mint, 'sm')}<span>${esc(last.symbol)}${last.mint ? ' ' + esc(last.mint.slice(0, 4) + '…' + last.mint.slice(-4)) : ''}</span>` : '—';
     } catch (e) { }
   }
   async function loadTradeDetails() {
@@ -161,7 +184,7 @@
       const buy = rows.find(r => r.kind === 'bought' || r.kind === 'copied');
       if (!buy) { $('#trade-details').innerHTML = '<div class="empty">Waiting for the first trade</div>'; return; }
       const sells = rows.filter(r => r.kind === 'sold' || r.kind === 'stopped').slice(0, 3);
-      $('#trade-details').innerHTML = `<div class="props"><span>Coin</span><span>${esc(buy.title.replace(/^(Bought|Copied) /, ''))}</span><span>Direction</span><span>BUY</span><span>Size</span><span>${esc(buy.value)}</span><span>When</span><span>${hm(buy.ts)}</span></div>` +
+      $('#trade-details').innerHTML = `<div class="props"><span>Coin</span><span class="coin-line">${av(buy.title, buy.image, buy.mint, 'sm')}${esc(buy.title.replace(/^(Bought|Copied) /, ''))}</span><span>Direction</span><span>BUY</span><span>Size</span><span>${esc(buy.value)}</span><span>When</span><span>${hm(buy.ts)}</span></div>` +
         sells.map(s => `<div class="journal"><b class="${String(s.value).startsWith('-') ? 'red' : 'green'}">${esc(s.title)}</b> @ ${hms(s.ts)} · ${esc(s.subtitle)} · <span class="${String(s.value).startsWith('-') ? 'red' : 'green'}">${esc(s.value)}</span></div>`).join('');
     } catch (e) { }
   }
@@ -186,7 +209,7 @@
       cards.push(`<div class="botcard">${head}${body}</div>`);
       full.push(`<div class="card">${head}<div class="row" style="min-height:44px"><div class="mid"><div>${d.today} today</div></div>
         <label class="secondary small">${d.paused ? 'Paused' : 'Running'} <input type="checkbox" data-pause="${b}" ${d.paused ? '' : 'checked'} ${PLANB ? 'disabled' : ''}></label></div>
-        ${d.rows.map(r => `<div class="row" style="min-height:44px"><div class="mid"><div class="small">${esc(r.text)}</div><div>${hms(r.ts)}${r.coin_url ? ` · <a class="link" href="${esc(r.coin_url)}" target="_blank" rel="noopener">Open on FOMO</a>` : ''}</div></div></div>`).join('') || '<div class="empty">Nothing yet tonight</div>'}
+        ${d.rows.map(r => `<div class="row" style="min-height:44px">${r.mint ? av(r.symbol || r.text, r.image, r.mint, 'sm') : ''}<div class="mid"><div class="small">${esc(r.text)}</div><div>${hms(r.ts)}${r.coin_url ? ` · <a class="link" href="${esc(r.coin_url)}" target="_blank" rel="noopener">Open on FOMO</a>` : ''}</div></div></div>`).join('') || '<div class="empty">Nothing yet tonight</div>'}
         <button class="link" data-go="account">Settings</button></div>`);
     }
     $('#carousel').innerHTML = cards.join(''); $('#bots-full').innerHTML = full.join('');
@@ -198,8 +221,9 @@
   function renderActivity(el, rows) {
     if (!rows.length) { el.innerHTML = '<div class="empty">Nothing yet tonight</div>'; return; }
     el.innerHTML = rows.map(r => { const neg = String(r.value).startsWith('-');
-      const ic = { bought: '↗', sold: '$', stopped: '■', rejected: '×', copied: '⧉' }[r.kind] || '·';
-      return `<div class="row" data-kind="${r.kind}" data-mint="${esc(r.mint || '')}"><div class="ic">${ic}</div><div class="mid"><div>${esc(r.title)}</div><div>${esc(r.subtitle)}${r.coin_url ? ` · <a class="link" href="${esc(r.coin_url)}" target="_blank" rel="noopener">Open on FOMO</a>` : ''}</div></div><div class="val ${r.kind === 'sold' && !neg ? 'green' : neg || r.kind === 'stopped' ? 'red' : ''}">${esc(r.value)}</div></div>`; }).join('');
+      const fallback = { bought: '↗', sold: '$', stopped: '■', rejected: '×', copied: '⧉' }[r.kind] || '·';
+      const icon = r.mint ? av(r.title, r.image, r.mint) : `<div class="ic">${fallback}</div>`;
+      return `<div class="row" data-kind="${r.kind}" data-mint="${esc(r.mint || '')}">${icon}<div class="mid"><div>${esc(r.title)}</div><div>${esc(r.subtitle)}${r.coin_url ? ` · <a class="link" href="${esc(r.coin_url)}" target="_blank" rel="noopener">Open on FOMO</a>` : ''}</div></div><div class="val ${r.kind === 'sold' && !neg ? 'green' : neg || r.kind === 'stopped' ? 'red' : ''}">${esc(r.value)}</div></div>`; }).join('');
     el.querySelectorAll('.row').forEach(row => row.onclick = e => { if (e.target.tagName === 'A' || !row.dataset.mint) return; row.dataset.kind === 'rejected' ? openAudit(row.dataset.mint) : openCoin(row.dataset.mint); });
   }
   async function loadActivity(more) {
@@ -250,7 +274,7 @@
     try { const d = await api('/coin/' + mint); const c = d.coin || {}, p = d.position;
       const age = c.migrated_at ? Math.round((Date.now() / 1000 - c.migrated_at) / 3600) + 'h old' : '';
       const since = p && d.price ? (100 * (d.price / p.entry_price - 1)) : null;
-      overlay(`<h2 style="margin:8px 0 0">${esc(c.name || c.symbol || mint.slice(0, 6))} <span class="pill orange">${esc(d.mode)}</span></h2>
+      overlay(`<h2 class="coin-head" style="margin:8px 0 0">${av(c.symbol || c.name, d.image || c.image, mint)}${esc(c.name || c.symbol || mint.slice(0, 6))} <span class="pill orange">${esc(d.mode)}</span></h2>
         <div class="secondary">${esc(c.symbol || '')} · Solana · ${age} ${d.shield ? `<span class="chip">🛡 ${d.shield}</span>` : ''}</div>
         <div class="big" style="font-size:48px;margin-top:8px">${d.price != null ? '$' + Number(d.price).toPrecision(4) : '—'}</div>
         ${since != null ? `<div class="${since >= 0 ? 'green' : 'red'}">${since >= 0 ? '▲' : '▼'} ${Math.abs(since).toFixed(1)}% since entry</div>` : ''}
@@ -273,7 +297,7 @@
   async function openAudit(mint) {
     overlay('<div class="empty">Loading…</div>');
     try { const d = await api('/audit/' + mint); const c = d.coin || {};
-      overlay(`<h2 style="margin:8px 0 0">${esc(c.symbol || mint.slice(0, 6))} · Audit</h2><div class="discs" id="discs">${d.layers.map(l => `<div class="disc na" data-pass="${l.pass}"><b>${l.layer}</b><span>${esc(l.name)}</span><small>${esc(l.value_text)}</small></div>`).join('') || '<div class="empty">No audit yet</div>'}</div>
+      overlay(`<h2 class="coin-head" style="margin:8px 0 0">${av(c.symbol, d.image || c.image, mint)}${esc(c.symbol || mint.slice(0, 6))} · Audit</h2><div class="discs" id="discs">${d.layers.map(l => `<div class="disc na" data-pass="${l.pass}"><b>${l.layer}</b><span>${esc(l.name)}</span><small>${esc(l.value_text)}</small></div>`).join('') || '<div class="empty">No audit yet</div>'}</div>
         <div class="card">${esc(d.social)}${d.score && d.score.score != null ? ' · score ' + d.score.score : ''}</div>
         <a class="btn ghost" style="display:flex;align-items:center;justify-content:center;text-decoration:none" href="${esc(d.coin_url)}" target="_blank" rel="noopener">Open on FOMO</a>`);
       const discs = $$('#discs .disc'); let i = 0;

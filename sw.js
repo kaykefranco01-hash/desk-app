@@ -1,15 +1,8 @@
-// Service worker: caches the app shell only. Never caches desk data (state.json etc. always go to network).
-const SHELL = 'desk-shell-v34';
-const FILES = ['./', 'index.html', 'app.css', 'app.js', 'chart.js', 'manifest.json', 'icons/apple-touch-icon.png'];
-self.addEventListener('install', e => { e.waitUntil(caches.open(SHELL).then(c => c.addAll(FILES))); self.skipWaiting(); });
-self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== SHELL).map(k => caches.delete(k))))); self.clients.claim(); });
-self.addEventListener('fetch', e => {
-  const u = new URL(e.request.url);
-  if (u.origin !== location.origin) return;           // data lives on another origin: never touched
-  if (u.pathname.endsWith('/overnight.json') || u.pathname.endsWith('/night-replay.json')) {
-    e.respondWith(fetch(e.request, {cache: 'no-store'}));
-    return;
-  }
-  e.respondWith(fetch(e.request).then(r => { const cp = r.clone(); caches.open(SHELL).then(c => c.put(e.request, cp)); return r; })
-    .catch(() => caches.match(e.request)));
+// desk2 service worker: no caching (data and shell always from network); clears the old desk app's caches.
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.map(k => caches.delete(k)))).then(() => self.clients.claim())); });
+self.addEventListener('push', e => {
+  let d = {}; try { d = e.data.json(); } catch (_) { d = { body: e.data && e.data.text() }; }
+  e.waitUntil(self.registration.showNotification(d.title || 'Grok Bot · now', { body: d.body || '', icon: 'icons/icon-192.png', data: { url: d.url } }));
 });
+self.addEventListener('notificationclick', e => { e.notification.close(); const u = e.notification.data && e.notification.data.url; if (u) e.waitUntil(clients.openWindow(u)); });

@@ -1,140 +1,109 @@
 <!doctype html>
-<html lang="pt-PT">
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Desk">
 <meta name="theme-color" content="#000000">
-<meta name="referrer" content="no-referrer">
-<title>Grok Terminal</title>
+<title>Grok Bot</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
-<div id="err" class="err" hidden></div>
-<div id="demo-bar" class="demo-bar" role="status" aria-live="polite" hidden><div id="demo-t" class="demo-t"></div><div id="demo-s" class="demo-s"></div><div class="demo-pb"><i id="demo-p"></i></div></div>
-<main id="view">
-  <!-- HOME (live home, Kayke t271u): every number and line comes from the desk's own data (state.json / account.json) -->
-  <section id="tab-home" class="tab">
-    <header class="lh fh">
-      <div class="fh-brand"><b>fomo</b><span class="ter"> · <span id="open-n" class="num">0</span> abertas</span></div>
-      <span id="clock" class="num lh-clock"></span>
-      <button class="icon-btn" id="btn-search" aria-label="Procurar"><i class="i-search"></i></button>
-      <button class="icon-btn" id="btn-bell" aria-label="Notificações"><i class="i-bell"></i><b id="bell-dot" class="bell-dot" hidden></b></button>
+<div id="banner" hidden></div>
+<main id="app">
+  <section id="tab-home" class="tab active">
+    <header class="nav">
+      <button class="avatar" data-go="account" aria-label="Account"><img src="icons/robot.svg" alt=""></button>
+      <button class="title" data-go="bots">Grok Bot <span class="chev">›</span></button>
+      <div class="working" id="working"><span class="spin"></span><span id="working-label">Working</span> <span id="elapsed" class="mono">00:00:00</span></div>
+      <button class="icon bell" data-go="activity" aria-label="Activity"><svg viewBox="0 0 24 24"><path d="M12 22a2.5 2.5 0 0 0 2.4-1.8H9.6A2.5 2.5 0 0 0 12 22Zm7-6V11a7 7 0 0 0-5.5-6.8V3.5a1.5 1.5 0 0 0-3 0v.7A7 7 0 0 0 5 11v5l-2 2v1h18v-1l-2-2Z"/></svg><i id="bell-dot" hidden></i></button>
     </header>
-    <div id="home-alert" class="home-alert" hidden></div>
-    <div class="err-slot"></div>
-    <div class="bal-row">
-      <div id="balance" class="balance num skel" aria-live="polite">$ 100.00</div>
-      <button type="button" id="paper" class="mode-pill paper pill-paper-tag" aria-label="Mudar entre PAPER e LIVE"><i></i><b id="mode-t">PAPER</b></button>
+    <div id="err" class="err" hidden></div>
+    <div class="balance-row">
+      <div id="balance" class="odometer big" aria-live="polite"><span class="skel w200"></span></div>
+      <span id="mode-pill" class="pill orange" hidden>PAPER</span>
     </div>
-    <div class="sub-row"><span id="today" class="num today skel-i">▲ $0.00 (0.00%)</span><span id="mult" class="pill-mult num skel-i">1.00×</span><span id="pnl-since" class="pnl-since ter small"></span></div>
-    <div class="night-row">
-      <div id="night-status" class="night-status" aria-live="polite">Noite PAPER · 22:00–06:30 Lisboa</div>
-      <button type="button" id="btn-replay" class="replay-btn" disabled aria-disabled="true">Replay da noite</button>
+    <div class="substats">
+      <span id="today" class="green"></span>
+      <span id="mult" class="pill green small" hidden></span>
+      <span id="wl" class="secondary"></span>
     </div>
-    <div id="replay-banner" class="replay-banner" hidden role="status">Replay · acelerado</div>
-    <div id="last-trade" class="lt-line" aria-live="polite" hidden></div>
-    <div id="open-pos" class="open-pos" hidden></div>
-    <div class="chart-wrap" id="chart-wrap"><canvas id="chart" aria-label="Gráfico do saldo"></canvas><i id="chart-head" class="chart-head" hidden></i>
-      <div id="chart-empty" class="chart-empty" hidden>À espera do primeiro trade</div></div>
-    <div class="ranges" id="ranges"><button class="on" data-r="LIVE"><i class="live-dot"></i>LIVE</button><button data-r="1H">1H</button><button data-r="4H">4H</button><button data-r="1D">1D</button><button data-r="1W">1W</button><button data-r="ALL">ALL</button></div>
-    <div class="row-h live-h">
-      <h2 class="h2">Ecrã ao vivo</h2>
-      <span class="live-link ter small">Computador do bot</span>
-    </div>
-    <div id="live-screen" class="live-card" aria-live="polite">
-      <div class="live-frame-wrap">
-        <img id="live-frame" alt="Ecrã ao vivo do computador do bot" hidden>
-        <div id="live-ph" class="live-ph">Ecrã ao vivo durante a noite</div>
-        <div class="live-ov"><i class="live-dot"></i> Live · Computador do bot</div>
-        <div id="live-badge" class="live-badge" hidden></div>
-        <div id="live-pills" class="live-pills" aria-live="polite"></div>
-        <div id="live-cap" class="live-cap"></div>
+    <div class="substats"><span id="market" class="pill grey small"></span><span id="fomo-state" class="secondary small"></span></div>
+    <div class="card chart-card">
+      <canvas id="chart" height="180"></canvas>
+      <div id="chart-empty" class="empty" hidden>Waiting for the first trade</div>
+      <div class="ranges" id="ranges">
+        <button class="on" data-r="LIVE">LIVE</button><button data-r="1H">1H</button><button data-r="4H">4H</button><button data-r="1D">1D</button><button data-r="1W">1W</button><button data-r="ALL">ALL</button>
       </div>
     </div>
-    <h2 class="h2 row-h ag-h">Bots <span class="ag-run green"><span id="agents-running" class="num skel-i">—</span> a correr</span></h2>
-    <div id="ag-rows" class="ag-rows" aria-label="Bots"></div>
-    <h2 class="h2 row-h">Atividade <button class="see-all green" data-go="activity">Ver tudo <span id="trades-n" class="num" hidden>0</span>›</button></h2>
-    <div id="home-activity" class="list act-list feed-list" aria-live="polite"></div>
-    <h2 class="h2 row-h" id="nights-h">Noites Overnight Desk</h2>
-    <div id="nights-box" class="days-box" aria-live="polite"></div>
-    <div class="meta ter small">Última atualização <span id="updated" class="num">—</span> · PAPER Overnight Desk</div>
-  </section>
-  <!-- AGENTS -->
-  <section id="tab-agents" class="tab" hidden>
-    <header class="nav"><div class="title">Bots</div></header>
-    <div class="err-slot"></div>
-    <div id="agents-list" class="stack"></div>
-  </section>
-  <!-- ACTIVITY -->
-  <section id="tab-activity" class="tab" hidden>
-    <header class="nav"><div class="title">Activity</div></header>
-    <div class="err-slot"></div>
-    <div id="activity-list" class="list"></div>
-    <button id="activity-more" class="btn-secondary" hidden>Load older</button>
-  </section>
-  <!-- ACCOUNT -->
-  <section id="tab-account" class="tab" hidden>
-    <header class="nav"><div class="title">Account</div></header>
-    <div class="err-slot"></div>
-    <details id="wallet-sec" class="wallet-fold">
-      <summary>Carteira do bot</summary>
-      <div class="gt-run wallet-card">
-        <div id="run-budget" class="run-bal">$0.00 · 0 SOL</div>
-        <div id="run-wallet" class="run-line ter">Carteira do bot: —</div>
-        <div class="addr-box panel-addr">
-          <code id="run-addr" class="addr-val"></code>
-          <button type="button" class="btn-copy" id="run-copy">Copiar</button>
-        </div>
+
+    <div class="card screen-card" id="screen-card">
+      <div class="screen-head">
+        <span id="live-dot" class="dot grey"></span><span id="live-label" class="secondary">Bot's computer</span>
+        <span id="lane" class="lane">Idle</span>
       </div>
-    </details>
-    <div id="account-body"></div>
+      <div class="screen-wrap" id="screen-wrap">
+        <img id="screen-a" alt="Bot's computer"><img id="screen-b" alt="" class="back">
+        <div id="screen-private" class="screen-overlay" hidden>Paused · private</div>
+        <div id="screen-empty" class="screen-overlay" hidden>No frame yet</div>
+      </div>
+      <div id="last-order" class="last-order secondary"></div>
+    </div>
+
+    <div class="card term-card">
+      <div class="bot-icons" id="bot-icons"></div>
+      <div class="term-head"><span id="term-coin" class="mono">—</span><span class="tertiary mono">agent log</span></div>
+      <div id="terminal" class="terminal mono"><div class="tertiary">Nothing yet tonight</div></div>
+    </div>
+
+    <div class="card trade-card" id="trade-card">
+      <div class="row-head"><span>Trade details</span></div>
+      <div id="trade-details"><div class="empty">Waiting for the first trade</div></div>
+    </div>
+
+    <div class="section-head"><span id="bots-head">Bots</span></div>
+    <div class="carousel" id="carousel"></div>
+
+    <div class="section-head"><span>Activity</span><button class="link" data-go="activity">See all</button></div>
+    <div class="card list" id="home-activity"></div>
   </section>
-  <!-- PUSHED SCREENS -->
-  <section id="scr-coin" class="tab screen" hidden>
-    <header class="nav nav-push"><button class="back" data-back aria-label="Back">‹</button><div class="nav-t" id="coin-navt"></div><span id="coin-paper" class="pill-paper" hidden>PAPER</span></header>
-    <div class="err-slot"></div>
-    <div id="coin-body"></div>
+
+  <section id="tab-bots" class="tab">
+    <header class="big-title">Bots</header>
+    <div id="bots-full"></div>
   </section>
-  <section id="scr-audit" class="tab screen" hidden>
-    <header class="nav nav-push"><button class="back" data-back aria-label="Back">‹</button><div class="nav-t">Auditor</div></header>
-    <div class="err-slot"></div>
-    <div id="audit-body"></div>
+
+  <section id="tab-activity" class="tab">
+    <header class="big-title">Activity</header>
+    <div class="card list" id="activity-list"></div>
+    <button class="btn ghost" id="more-activity" hidden>Load more</button>
   </section>
-  <section id="scr-search" class="tab screen" hidden>
-    <header class="nav nav-push"><button class="back" data-back aria-label="Back">‹</button>
-      <input id="search-in" class="search-in" placeholder="Name, symbol or mint" autocomplete="off" autocapitalize="off" spellcheck="false"></header>
-    <div id="search-list" class="list"></div>
-  </section>
-  <section id="scr-bell" class="tab screen" hidden>
-    <header class="nav nav-push"><button class="back" data-back aria-label="Back">‹</button><div class="nav-t">Notifications</div></header>
-    <div class="err-slot"></div>
-    <div id="bell-list" class="list"></div>
+
+  <section id="tab-account" class="tab">
+    <header class="big-title">Account</header>
+    <div class="card list" id="account-top"></div>
+    <div class="section-head"><span>Settings</span></div>
+    <div id="settings"></div>
+    <div class="section-head"><span>Copy picks</span></div>
+    <div id="picks"></div>
   </section>
 </main>
-<nav class="tabbar" id="tabbar">
-  <button data-go="home" class="on"><svg class="tab-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.2 11.2 12 4.4l7.8 6.8V20a1.6 1.6 0 0 1-1.6 1.6h-4.2v-6.2h-4v6.2H5.8A1.6 1.6 0 0 1 4.2 20Z"/></svg>Início</button>
-  <button data-go="agents"><svg class="tab-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.2 11.2a3.2 3.2 0 1 0-3.2-3.2 3.2 3.2 0 0 0 3.2 3.2Zm8 0a3 3 0 1 0-3-3 3 3 0 0 0 3 3ZM9.2 13.2c-3.3 0-6 1.7-6 4.1V20h12v-2.7c0-2.4-2.7-4.1-6-4.1Zm7.4 0c-.4 0-.9.05-1.3.12 1.6.9 2.7 2.2 2.7 3.98V20h4v-2.5c0-2.2-2.4-3.9-5.4-4.3Z"/></svg>Bots</button>
-  <button data-go="activity"><svg class="tab-ic tab-ic-pulse" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13h3.2l2-6.2L12.2 19l2.4-8.4L16.8 13H21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Atividade</button>
-  <button data-go="account"><svg class="tab-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12.2A3.6 3.6 0 1 0 8.4 8.6 3.6 3.6 0 0 0 12 12.2Zm0 1.8c-3.6 0-6.8 2-6.8 4.5V21h13.6v-2.5c0-2.5-3.2-4.5-6.8-4.5Z"/></svg>Conta</button>
+
+<div id="sheet" class="sheet" hidden><div class="sheet-body" id="sheet-body"></div></div>
+<div id="overlay" class="overlay" hidden><div class="overlay-body" id="overlay-body"></div></div>
+
+<nav class="tabbar">
+  <button data-go="home" class="on"><svg viewBox="0 0 24 24"><path d="M12 3 3 10v11h6v-6h6v6h6V10z"/></svg>Home</button>
+  <button data-go="bots"><svg viewBox="0 0 24 24"><path d="M9 2h6v2h-2v2h4a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V9a3 3 0 0 1 3-3h4V4H9zm0 9a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3m6 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3"/></svg>Bots</button>
+  <button data-go="activity"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4" fill="none" stroke="currentColor" stroke-width="2"/></svg>Activity</button>
+  <button data-go="account"><svg viewBox="0 0 24 24"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10m0 2c-5 0-9 2.5-9 6v2h18v-2c0-3.5-4-6-9-6"/></svg>Account</button>
 </nav>
-<div id="toast" class="toast" hidden></div>
-<canvas id="confetti" class="confetti" aria-hidden="true" hidden></canvas>
-<div id="mode-sheet" class="sheet" hidden>
-  <div class="sheet-bg" id="mode-sheet-bg"></div>
-  <div class="sheet-panel" role="dialog" aria-labelledby="mode-sheet-t" aria-modal="true">
-    <div class="sheet-grab"></div>
-    <h2 id="mode-sheet-t" class="sheet-t">Negociar com dinheiro real</h2>
-    <p id="mode-sheet-msg" class="sheet-mode">Vais negociar com dinheiro real. Confirmar?</p>
-    <p id="mode-sheet-err" class="sheet-err" hidden></p>
-    <button type="button" class="btn-fomo" id="mode-confirm">Confirmar</button>
-    <button type="button" class="btn-secondary" id="mode-cancel">Cancelar</button>
-  </div>
+<div id="paste" class="paste" hidden>
+  <div class="card"><h2>Paste your desk link</h2><p class="secondary">Open the link from Telegram or the QR code once. It stays on this phone.</p>
+  <input id="paste-input" placeholder="https://…#t=…" autocomplete="off"><button class="btn" id="paste-go">Open</button></div>
 </div>
 <script src="chart.js"></script>
 <script src="app.js"></script>

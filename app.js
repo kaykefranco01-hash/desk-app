@@ -1,1555 +1,296 @@
-// Desk app (plan B). Reads only the published JSON under d/{DATA_PATH}/ in the public bucket.
-// No key, token or data path is in this file: the path arrives once in the URL fragment (#d=...) and lives in
-// localStorage on the device. Every FOMO link shown is taken verbatim from the JSON (links.py on the server);
-// this file never builds, shortens or wraps one. The PAPER/LIVE button is the only in-app write: it posts to desk-budget with the device login token. Amount is not typed; the panel shows the deposited wallet balance.
-(() => {
-  'use strict';
-  // iPhone: block pinch / double-tap / gesture zoom (viewport also has user-scalable=no).
-  document.addEventListener('gesturestart', ev => ev.preventDefault());
-  document.addEventListener('gesturechange', ev => ev.preventDefault());
-  document.addEventListener('dblclick', ev => ev.preventDefault(), {capture: true});
-  const BASE = 'https://eaggelbvxpglfxsmcldr.supabase.co/storage/v1/object/public/desk';
-  const STATE_S = 15, EVENTS_S = 5, SCREEN_S = 15;
-  const HOME_POLL_S = 5;   // live home: state.json is rewritten every ~15 s by the desk; reading it every 5 s keeps the lag short
-  const $ = id => document.getElementById(id);
-  const RM = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
-  const safe = u => (typeof u === 'string' && /^https:\/\/[^\s"'<>]+$/.test(u)) ? u : null;   // pass-through only, never built here
-  let TOKEN_IMG = {};
-  const TOKEN_IMG_REMOTE = 'https://raw.githubusercontent.com/kaykefranco01-hash/desk-app/live-screen/live/token-images.json';
-  function rememberImages(j) {
-    const map = (j && j.images && typeof j.images === 'object') ? j.images : (j && typeof j === 'object' ? j : {});
-    for (const [k, v] of Object.entries(map)) { if (safe(v)) TOKEN_IMG[k] = v; }
-  }
-  async function pollTokenImages() {
-    for (const u of ['token-images.json', TOKEN_IMG_REMOTE]) {
-      try {
-        const r = await fetch(u + (u.includes('?') ? '&' : '?') + 't=' + Date.now(), {cache: 'no-store', referrerPolicy: 'no-referrer'});
-        if (r.ok) rememberImages(await r.json());
-      } catch (e) { /* keep whatever we have */ }
+/* Grok Bot desk app. Plain JS, no build. Only real numbers from the desk; never demo data. */
+(function () {
+  const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+  const COLORS = { scanner: '#64d2ff', analyst: '#ffd60a', brain: '#bf5af2', executor: '#00d35a', risk: '#ff6b9a' };
+  const ICONS = {
+    scanner: '<path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8m9 3h-2.1a7 7 0 0 0-1-2.4l1.5-1.5-1.5-1.5-1.5 1.5A7 7 0 0 0 13 5.1V3h-2v2.1a7 7 0 0 0-2.4 1L7.1 4.6 5.6 6.1l1.5 1.5A7 7 0 0 0 6.1 10H4v2h2.1a7 7 0 0 0 1 2.4l-1.5 1.5 1.5 1.5 1.5-1.5a7 7 0 0 0 2.4 1V19h2v-2.1a7 7 0 0 0 2.4-1l1.5 1.5 1.5-1.5-1.5-1.5a7 7 0 0 0 1-2.4H21z"/>',
+    analyst: '<path d="M12 5C6 5 2 12 2 12s4 7 10 7 10-7 10-7-4-7-10-7m0 11a4 4 0 1 1 0-8 4 4 0 0 1 0 8"/>',
+    brain: '<path d="M9 3a3 3 0 0 0-3 3 3 3 0 0 0-3 3c0 1.2.7 2.2 1.7 2.7A3 3 0 0 0 6 17a3 3 0 0 0 3 3V3m6 0v17a3 3 0 0 0 3-3 3 3 0 0 0 1.3-5.3A3 3 0 0 0 21 9a3 3 0 0 0-3-3 3 3 0 0 0-3-3"/>',
+    executor: '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
+    risk: '<path d="M12 2 4 5v6c0 5 3.4 9.7 8 11 4.6-1.3 8-6 8-11V5z"/>'
+  };
+  let TOKEN = null, PLANB = null, range = 'LIVE', lastState = null, lastOk = 0, termAfter = 0, failN = 0, actBefore = null;
+  const FIX = new URLSearchParams(location.search).get('fixture');
+  // GitHub Pages host: read-only PAPER snapshots that desk2 pushes every 15 s to branch desk2-live, one folder per 15 s bucket.
+  // A new path on raw.githubusercontent.com is fresh right after the push, so we read the newest finished bucket.
+  const GH = /github\.io$/.test(location.hostname) ? 'https://raw.githubusercontent.com/kaykefranco01-hash/desk-app/desk2-live/b/' : null;
+  const PERIOD = 15; let curB = null;
+  async function ghGet(f, isState) {
+    const now = Math.floor(Date.now() / 1000 / PERIOD);
+    const tries = isState || curB == null ? [1, 2, 3, 4, 5, 6, 7, 8].map(k => now - k) : [curB, curB - 1, curB - 2];
+    for (const b of tries) {
+      if (isState && curB != null && b < curB) break;  // never go back in time
+      let r; try { r = await fetch(GH + b + '/' + f, { cache: 'no-store', referrerPolicy: 'no-referrer' }); } catch (e) { continue; }
+      if (r.ok) { if (isState) curB = b; return f.endsWith('.jpg') ? r : r.json(); }
     }
+    if (isState && curB != null) { const r = await fetch(GH + curB + '/' + f, { referrerPolicy: 'no-referrer' }); if (r.ok) return r.json(); }
+    throw new Error('no snapshot');
   }
-  const imgFor = (mint, fallback) => safe(fallback) || (mint && safe(TOKEN_IMG[mint])) || null;
-  function clock12(iso) {
-    if (!iso && iso !== 0) return '';
-    const d = (typeof iso === 'number') ? new Date(iso * 1000) : new Date(iso);
-    if (isNaN(d)) return '';
-    return d.toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit', timeZone: TZ});
-  }
-  const BADGE_BUY = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 2.2v7.6M3.2 6.8L6 9.6l2.8-2.8" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-  const BADGE_SELL = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 9.8V2.2M3.2 5.2L6 2.4l2.8 2.8" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-  const BADGE_RADAR = '<svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="2.1" fill="none" stroke="#fff" stroke-width="1.3"/><circle cx="6" cy="6" r="3.8" fill="none" stroke="#fff" stroke-width="1.1" opacity=".85"/><path d="M6 6L9.6 3.2" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/><circle cx="6" cy="6" r="0.8" fill="#fff"/></svg>';
-  function badgeKind(kind) {
-    const k = String(kind || '').toLowerCase();
-    if (['bought', 'buy', 'entrada', 'signal'].includes(k)) return ['#0a84ff', BADGE_BUY];
-    if (['sold', 'sell', 'stopped', 'partial', 'saída', 'exit'].includes(k)) return ['#30d158', BADGE_SELL];
-    return ['#636366', BADGE_RADAR];
-  }
-  function actBadge(kind) {
-    const [col, svg] = badgeKind(kind);
-    return `<i class="act-bd" style="background:${col}">${svg}</i>`;
-  }
-  const ORDER = ['scanner', 'auditor', 'analyst', 'executor', 'risk', 'brain', 'discover'];
-  const NAMES = {scanner: 'Scanner', auditor: 'Auditor', analyst: 'Analyst', executor: 'Executor', risk: 'Risk', brain: 'Brain', discover: 'Discover'};
-  const COLORS = {scanner: '#0a84ff', auditor: '#bf5af2', analyst: '#30d158', executor: '#ff9f0a', risk: '#ff453a', brain: '#5e5ce6'};   // same colours as the Home rows
 
-  // ---------- 1. desk link from the fragment -> localStorage, then wipe the fragment ----------
-  (function readFragment() {
-    const h = location.hash.replace(/^#/, ''); if (!h) return;
-    const p = new URLSearchParams(h), d = p.get('d'), t = p.get('t');
-    if (d && /^[A-Za-z0-9]{32,64}$/.test(d)) localStorage.setItem('desk_d', d);
-    if (t && /^[A-Za-z0-9_\-]{20,200}$/.test(t)) localStorage.setItem('desk_t', t);   // STEP 7 login token: kept on device, unused in plan B
-    if (d || t) history.replaceState(null, '', location.pathname + location.search);
-  })();
-  const D = localStorage.getItem('desk_d');
-
-  // ---------- formatting ----------
-  const usd = (v, dp = 2) => v == null || isNaN(v) ? '—' : (v < 0 ? '-$' : '$') + Math.abs(Number(v)).toLocaleString('en-US', {minimumFractionDigits: dp, maximumFractionDigits: dp});
-  const usdHero = (v) => v == null || isNaN(v) ? '—' : (v < 0 ? '-$ ' : '$ ') + Math.abs(Number(v)).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-  const usdK = v => { if (v == null || isNaN(v)) return '—'; const a = Math.abs(v);
-    return a >= 1e9 ? '$' + (v / 1e9).toFixed(2) + 'B' : a >= 1e6 ? '$' + (v / 1e6).toFixed(2) + 'M' : a >= 1e3 ? '$' + (v / 1e3).toFixed(1) + 'K' : usd(v); };
-  const pct = v => v == null || isNaN(v) ? '—' : (v >= 0 ? '+' : '') + Number(v).toFixed(2) + '%';
-  const price = v => { if (v == null || !(v > 0)) return v === 0 ? '$0' : '—'; if (v >= 1) return usd(v, 4); const dp = Math.min(12, 3 - Math.floor(Math.log10(v))); return '$' + Number(v).toFixed(dp); };
-  const TZ = 'Europe/Lisbon';   // every time on screen is Lisbon time
-  const hm = iso => iso ? new Date(iso).toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit', timeZone: TZ}) : '—';
-  const hms = d => d ? d.toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: TZ}) : 'never';
-  const short = m => m ? m.slice(0, 4) + '…' + m.slice(-4) : '';
-  const left = s => s == null ? '—' : (s >= 3600 ? Math.floor(s / 3600) + 'h ' : '') + Math.floor(s % 3600 / 60) + 'm';
-
-  // ---------- data ----------
-  const cache = {};                  // name -> last good JSON (kept on screen while offline)
-  let lastOk = null, offline = false, failN = 0, retryAt = 0;
-  async function get(name) {
-    const dv = demoFile(name); if (dv !== undefined) { cache[name] = dv; return dv; }
-    let r;
-    try { r = await fetch(`${BASE}/d/${D}/${name}.json?t=${Date.now()}`, {cache: 'no-store', referrerPolicy: 'no-referrer'}); }
-    catch (e) { const n = new Error('network'); n.net = true; throw n; }
-    if (r.status === 400 || r.status === 404) { const e = new Error('missing'); e.missing = true; throw e; }
-    if (!r.ok) { const e = new Error('HTTP ' + r.status); e.net = true; throw e; }
-    const j = await r.json(); cache[name] = j; return j;
+  // ---------- auth ----------
+  function boot() {
+    const h = new URLSearchParams(location.hash.slice(1));
+    if (h.get('t')) { localStorage.setItem('desk_token', h.get('t')); history.replaceState(null, '', location.pathname + location.search); }
+    if (h.get('d')) { localStorage.setItem('desk_planb', h.get('d')); history.replaceState(null, '', location.pathname + location.search); }
+    TOKEN = localStorage.getItem('desk_token'); PLANB = localStorage.getItem('desk_planb');
+    if (GH) { PLANB = 'gh'; TOKEN = null; return true; }
+    if (!TOKEN && !PLANB) { $('#paste').hidden = false; return false; }
+    return true;
   }
-  // ---------- DEMO (ops/demo.py): one separate file, demo.json. Shown ONLY while it is active and fresh (< 30 s).
-  // While on, the files it carries replace the same names on screen, under an orange DEMO banner. When it ends or
-  // goes stale the app reloads and shows the real desk again. Nothing here writes anywhere.
-  let DEMO = null, demoWas = false;
-  const DEMO_FRESH_S = 30;
-  const demoOn = () => !!(DEMO && DEMO.active === true && DEMO.files && Math.abs(Date.now() / 1000 - Number(DEMO.epoch || 0)) < DEMO_FRESH_S);
-  function demoFile(name) {
-    if (!demoOn()) return undefined;
-    const f = DEMO.files;
-    if (Object.prototype.hasOwnProperty.call(f, name)) return f[name];
-    if (/^chart(\/|$)/.test(name)) return f['chart/LIVE'];
-    return undefined;
-  }
-  async function tryGet(name) { try { return await get(name); } catch (e) { if (e.missing) { cache[name] = null; return null; } throw e; } }
+  $('#paste-go').onclick = () => { const v = $('#paste-input').value.trim(); const i = v.indexOf('#'); if (i >= 0) { location.hash = v.slice(i); location.reload(); } };
 
-  // ---------- error row: one red row under the navbar of the visible screen ----------
-  function errRow() {
-    const vis = document.querySelector('.tab:not([hidden]) .err-slot'), e = $('err');
-    if (!offline) { e.hidden = true; return; }
-    const n = Math.max(0, Math.ceil((retryAt - Date.now()) / 1000));
-    e.textContent = D ? `Desk offline · retrying in ${n}s · last update ${hms(lastOk)}` : 'Desk offline · no desk link on this device · last update never';
-    if (vis && e.parentNode !== vis) vis.appendChild(e);
-    e.hidden = false;
+  const PLANB_MAP = p => {
+    if (p.startsWith('/state')) return 'state.json';
+    if (p.startsWith('/chart')) return 'chart/' + (new URLSearchParams(p.split('?')[1]).get('range') || 'LIVE') + '.json';
+    if (p.startsWith('/activity')) return 'activity.json';
+    if (p.startsWith('/terminal')) return 'terminal.json';
+    if (p.startsWith('/screen.jpg')) return 'screen.jpg';
+    const m = p.match(/^\/(coin|audit)\/([^?]+)/); if (m) return m[1] + '/' + m[2] + '.json';
+    const b = p.match(/^\/bots\/(\w+)\/decisions/); if (b) return 'bots/' + b[1] + '/decisions.json';
+    return null;
+  };
+  async function api(path, opt = {}) {
+    if (PLANB) {
+      const f = PLANB_MAP(path); if (!f) throw new Error('read-only (plan B): use Telegram');
+      if (GH) return ghGet(f, f === 'state.json');
+      const r = await fetch(PLANB.replace(/\/$/, '') + '/' + f + '?v=' + Date.now(), { cache: 'no-store' });
+      if (!r.ok) throw new Error('HTTP ' + r.status); return r.json();
+    }
+    const r = await fetch('/api' + path, { ...opt, headers: { 'Authorization': 'Bearer ' + TOKEN, 'Content-Type': 'application/json' }, cache: 'no-store' });
+    if (r.status === 401) { localStorage.removeItem('desk_token'); $('#paste').hidden = false; throw new Error('401'); }
+    const j = await r.json(); if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status)); return j;
   }
-  setInterval(() => { errRow(); if (demoWas && !demoOn()) location.reload(); }, 1000);
+  const screenUrl = () => GH ? (curB != null ? GH + curB + '/screen.jpg' : '') : PLANB ? PLANB.replace(/\/$/, '') + '/screen.jpg?v=' + Date.now() : '/api/screen.jpg?t=' + encodeURIComponent(TOKEN) + '&v=' + Date.now();
+
+  // ---------- format ----------
+  const money = v => v == null ? '—' : (v < 0 ? '-$' : '$') + Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const hms = ts => { const d = new Date(ts * 1000); return d.toTimeString().slice(0, 8); };
+  const hm = ts => new Date(ts * 1000).toTimeString().slice(0, 5);
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const ago = ts => { const s = Date.now() / 1000 - ts; return s < 60 ? Math.round(s) + 's ago' : s < 3600 ? Math.round(s / 60) + 'm ago' : Math.round(s / 3600) + 'h ago'; };
 
   // ---------- odometer ----------
-  function odometer(el, text) {
-    if (el.dataset.v === text) return;
-    const old = el.dataset.v || ''; el.dataset.v = text; el.classList.remove('skel');
-    el.setAttribute('aria-label', text);
-    const same = old.length === text.length && el.querySelector('.od');
-    if (!same || RM()) {
-      el.innerHTML = '<span class="od">' + [...text].map(ch => /\d/.test(ch)
-        ? `<span class="od-d"><span class="od-s" style="transform:translateY(-${ch}0%)">${[...'0123456789'].map(d => `<span>${d}</span>`).join('')}</span></span>`
-        : `<span class="od-c">${esc(ch)}</span>`).join('') + '</span>';
-      return;
+  function odometer(el, value) {
+    const txt = money(value), [whole, cents] = txt.split('.');
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (el.dataset.v === txt) return; const first = !el.dataset.v; el.dataset.v = txt;
+    const chars = (whole + '.' + cents).split('');
+    if (el.children.length !== chars.length || first) {
+      el.innerHTML = chars.map((ch, i) => /\d/.test(ch) ? `<span class="d${i > whole.length ? ' cents' : ''}"><span class="s">${[...'0123456789'].map(n => `<span>${n}</span>`).join('')}</span></span>` : `<span class="${i >= whole.length ? 'cents' : ''}">${ch}</span>`).join('');
     }
-    const kids = el.querySelector('.od').children, n = text.length;
     let k = 0;
-    for (let i = n - 1; i >= 0; i--) {
-      const ch = text[i], node = kids[i];
-      if (/\d/.test(ch) && node.classList.contains('od-d')) {
-        if (ch !== old[i]) { const s = node.firstChild; s.style.transitionDelay = (k * 30) + 'ms'; s.style.transform = `translateY(-${ch}0%)`; k++; }
-      } else if (node.textContent !== ch) node.textContent = ch;
-    }
+    chars.forEach((ch, i) => { const c = el.children[i]; if (/\d/.test(ch) && c.firstChild) { const s = c.firstChild; s.style.transitionDelay = reduce ? '0ms' : (k++ * 30) + 'ms'; s.style.transform = `translateY(-${(+ch) * 1.05}em)`; } else if (!/\d/.test(ch)) c.textContent = ch; });
   }
 
-  function fitBalance() {
-    const el = $('balance'), row = el.parentNode;
-    el.style.fontSize = '';
-    const room = row.clientWidth;
-    let fs = 64; while (el.scrollWidth > room && fs > 40) { fs -= 2; el.style.fontSize = fs + 'px'; }
+  // ---------- render home ----------
+  function renderState(st) {
+    lastState = st; lastOk = Date.now(); failN = 0; $('#err').hidden = true;
+    if (PLANB && st.updated && Date.now() / 1000 - st.updated > 90) { $('#err').hidden = false; $('#err').textContent = `Desk not publishing · last update ${hm(st.updated)}`; }
+    $('#banner').hidden = !st.fixture; if (st.fixture) $('#banner').textContent = 'TEST FIXTURE · PAPER · not real trades';
+    odometer($('#balance'), st.balance);
+    $('#mode-pill').hidden = false; $('#mode-pill').textContent = st.mode; $('#mode-pill').className = 'pill ' + (st.mode === 'LIVE' ? 'green' : 'orange');
+    const t = st.today_pct || 0; $('#today').textContent = (t >= 0 ? '+' : '') + t.toFixed(2) + '% today'; $('#today').className = t >= 0 ? 'green' : 'red';
+    $('#mult').hidden = !st.multiplier; $('#mult').textContent = (st.multiplier || 0).toFixed(2) + '×';
+    $('#wl').innerHTML = `${st.trades} trade${st.trades === 1 ? '' : 's'} · <span class="green">${st.wins} W</span> · <span class="red">${st.losses} L</span>`;
+    const mk = $('#market'); mk.textContent = st.market; mk.className = 'pill small ' + (st.market_mode === 'RED' ? 'red' : st.market_mode === 'GREEN' ? 'green' : 'grey');
+    $('#fomo-state').textContent = st.fomo_logged_out ? 'FOMO logged out' : (st.fomo_ok_at ? 'FOMO ok ' + ago(st.fomo_ok_at) : '');
+    const sec = Math.max(0, Math.floor(Date.now() / 1000 - st.started_at));
+    $('#elapsed').textContent = [sec / 3600, sec / 60 % 60, sec % 60].map(v => String(Math.floor(v)).padStart(2, '0')).join(':');
+    $('#working').classList.toggle('idle', !st.in_window); $('#working-label').textContent = st.in_window ? 'Working' : 'Waiting for night';
+    const fresh = st.last_frame_at && (Date.now() / 1000 - st.last_frame_at) < 5;
+    $('#live-dot').className = 'dot ' + (fresh ? 'red' : 'grey');
+    $('#live-label').textContent = fresh ? "Live · Bot's computer" : (st.last_frame_at ? 'Last frame ' + hm(st.last_frame_at) : "Bot's computer");
+    $('#lane').textContent = st.lane || 'Idle'; $('#lane').style.color = st.lane_bot ? COLORS[st.lane_bot] : '';
+    $('#screen-private').hidden = !st.private; $('#screen-empty').hidden = !!st.last_frame_at || st.private;
+    const o = st.last_order;
+    $('#last-order').innerHTML = o ? `${o.side === 'buy' ? 'Bought' : 'Sold'} ${esc(o.symbol || o.mint.slice(0, 4))} · ${money(o.fill_usd || o.usd)} · ${o.mode === 'PAPER' ? 'PAPER' : (o.status === 'done' ? 'verified' : esc(o.status))} <span class="checks">${o.mode === 'PAPER' ? '' : [o.screen_ok, o.api_ok, o.chain_ok].map(x => x ? '✓' : '·').join('')}</span>` : 'No orders yet';
+    $('#bots-head').textContent = `Bots · ${Object.keys(COLORS).filter(b => st.heartbeats && st.heartbeats[b] && Date.now() / 1000 - st.heartbeats[b] < 120).length} running`;
   }
-  addEventListener('resize', fitBalance);
-  let balTween = 0;
-  function tweenBalance(next) {
-    const el = $('balance'); if (!el) return;
-    const to = Number(next);
-    const from = (el.dataset.n != null && isFinite(Number(el.dataset.n))) ? Number(el.dataset.n) : to;
-    el.dataset.n = isFinite(to) ? String(to) : '';
-    el.classList.remove('flash-up', 'flash-down');
-    if (isFinite(from) && isFinite(to) && to !== from) {
-      el.classList.add(to > from ? 'flash-up' : 'flash-down');
-      clearTimeout(el._flashT);
-      el._flashT = setTimeout(() => el.classList.remove('flash-up', 'flash-down'), 900);
-    }
-    cancelAnimationFrame(balTween);
-    if (RM() || !isFinite(from) || !isFinite(to) || from === to) {
-      odometer(el, isFinite(to) ? usdHero(to) : '—'); fitBalance(); return;
-    }
-    const t0 = performance.now(), DUR = 480;
-    const step = now => {
-      const p = Math.min(1, (now - t0) / DUR);
-      const e = 1 - Math.pow(1 - p, 3);
-      odometer(el, usdHero(from + (to - from) * e)); fitBalance();
-      if (p < 1) balTween = requestAnimationFrame(step);
-    };
-    balTween = requestAnimationFrame(step);
-  }
-
-  // ---------- navigation ----------
-  const stack = []; let tab = 'home';
-  const visible = () => stack.length ? stack[stack.length - 1].scr : 'tab-' + tab;
-  function show(id) {
-    document.querySelectorAll('.tab').forEach(s => s.hidden = s.id !== id);
-    $('tabbar').hidden = id.startsWith('scr-');
-    document.querySelectorAll('.tabbar button').forEach(b => b.classList.toggle('on', b.dataset.go === tab));
-    errRow();
-  }
-  function go(t, anchor) {
-    stack.length = 0; tab = t; show('tab-' + t); window.scrollTo(0, 0);
-    refreshScreen().then(() => { if (anchor) { const a = $(anchor); if (a) a.scrollIntoView(); } });
-  }
-  function push(scr, arg) { stack.push({scr, arg}); history.pushState({s: stack.length}, ''); show(scr); window.scrollTo(0, 0); refreshScreen(true); }
-  function back() { if (!stack.length) return; stack.pop(); show(visible()); refreshScreen(); }
-  addEventListener('popstate', () => { if (stack.length) back(); });
-
-  document.addEventListener('click', ev => {
-    const b = ev.target.closest('[data-back]'); if (b) { history.back(); return; }
-    const c = ev.target.closest('[data-coin]'); if (c && c.dataset.coin) { ev.preventDefault(); push('scr-coin', c.dataset.coin); return; }
-    const a = ev.target.closest('[data-audit]'); if (a) { ev.preventDefault(); push('scr-audit', a.dataset.audit); return; }
-    const g = ev.target.closest('[data-go]'); if (g) { ev.preventDefault(); go(g.dataset.go, g.dataset.anchor); return; }
-    const r = ev.target.closest('[data-range]'); if (r) { range = r.dataset.range; renderRanges(); loadChart(); return; }
-    const inv = ev.target.closest('#invite'); if (inv) { invite(inv.dataset.url); return; }
-    const cp = ev.target.closest('[data-copy]'); if (cp) { copyText(cp.dataset.copy, 'Command copied'); return; }
-    const ro = ev.target.closest('[data-ro]'); if (ro) { toast(ro.dataset.ro); }
-  });
-  $('btn-search').onclick = () => push('scr-search');
-  $('btn-bell').onclick = () => push('scr-bell');
-  if ($('paper')) $('paper').onclick = () => onModeTap();
-  if ($('mode-sheet-bg')) $('mode-sheet-bg').onclick = () => closeMode();
-  if ($('mode-cancel')) $('mode-cancel').onclick = () => closeMode();
-  if ($('mode-confirm')) $('mode-confirm').onclick = () => confirmMode();
-  if ($('run-copy')) $('run-copy').onclick = () => { const a = $('run-addr').textContent; if (a) copyText(a, 'Endereço copiado'); };
-  $('ranges').querySelectorAll('button').forEach(b => { b.dataset.range = b.dataset.r; });
-
-  let toastT = 0;
-  function toast(msg) {
-    const t = $('toast'); if (!t || msg == null || msg === '') return;
-    t.textContent = msg; t.hidden = false;
-    t.classList.remove('in', 'out');
-    if (!RM()) { void t.offsetWidth; t.classList.add('in'); }
-    clearTimeout(toastT);
-    toastT = setTimeout(() => {
-      if (RM()) { t.hidden = true; t.classList.remove('in'); return; }
-      t.classList.remove('in'); t.classList.add('out');
-      toastT = setTimeout(() => { t.hidden = true; t.classList.remove('out'); }, 340);
-    }, 2000);
-  }
-  async function invite(url) {
-    if (!safe(url)) return;
-    try { if (navigator.share) { await navigator.share({url}); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
-    try { await navigator.clipboard.writeText(url); } catch (e) {
-      const ta = document.createElement('textarea'); ta.value = url; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
-    }
-    toast('Link copied');
-  }
-  async function copyText(s, msg) {
-    try { await navigator.clipboard.writeText(s); } catch (e) {
-      const ta = document.createElement('textarea'); ta.value = s; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
-    }
-    toast(msg);
-  }
-  function orderStatus(s) {
-    if (s === 'dry_filled') return 'dry-filled (pilot answered, no money moved)';
-    if (s === 'expired') return 'expired (no reply)';
-    if (s === 'filled') return 'filled';
-    if (s === 'open') return 'open';
-    return s || '—';
-  }
-  function pilotCards(pl) {
-    // No secrets here: the desk publishes only status, desk.yaml text/diff and the restart note.
-    if (!pl) return '';
-    const chips = (pl.chips || []).map(c => `<span class="chip ${c.ok === false ? 'bad' : c.ok ? 'ok' : ''}"><span class="ck">${esc(c.label)}</span> ${esc(c.value)}</span>`).join('');
-    const y = pl.yaml || {}, diff = y.diff || [];
-    const dl = diff.length ? diff.map(d => `<div class="dl ${d.sign === '+' ? 'add' : 'del'}"><span class="sg">${d.sign === '+' ? '+' : '−'}</span>${esc(d.text)}</div>`).join('')
-      : `<div class="dl none">${y.running ? 'No changes. Running desk.yaml matches the desk.' : 'No desk.yaml reported yet (pilot not seen).'}</div>`;
-    return `<div class="ghead">Pilot on the 24h server</div>
-      <div class="chips">${chips}</div>
-      <div class="group">
-        <div class="row"><span class="k">Kill switch</span><span class="v ${pl.halt ? 'red' : 'green'}">${pl.halt ? 'Stopped' : 'Running'}</span></div>
-        <div class="row"><span class="k">Mode</span><span class="v">${esc(pl.mode || '—')}${pl.race ? ' · race' : ''}</span></div>
-        ${pl.raceBlock ? `<div class="setrow small sec">${esc(pl.raceBlock)}</div>` : ''}
-        ${pl.errorBrake && pl.errorBrake.active ? `<div class="setrow small red">Compras pausadas por erro · ${esc(pl.errorBrake.ticker || '?')} · -$${esc(Number(pl.errorBrake.lossUsd || 0).toFixed(2))}. Vendas e stops continuam. Para voltar a comprar: <b>/retomar</b> no Telegram.</div>` : ''}
-        ${pl.lastError ? `<div class="setrow small red">${esc(pl.lastError)}${pl.errorPersistent ? ' · há ' + Math.max(1, Math.round((pl.errorSinceS || 0) / 60)) + ' min' : ''}</div>` : ''}
-        ${pl.lastOrder && pl.lastOrder.id ? `<div class="row"><span class="k">Last order</span><span class="v">${esc(pl.lastOrder.id)} · ${esc(orderStatus(pl.lastOrder.status))}</span></div>` : ''}</div>
-      ${viaNote(pl.control, 'pilot stop | pilot start')}
-      <div class="ghead">desk.yaml ${y.diffKind === 'pending' ? '· pending change' : y.diffKind === 'last change' ? '· last change' : ''}</div>
-      <div class="group pad"><div class="diff">${dl}</div>
-        ${y.diffKind === 'pending' ? `<div class="setrow small sec">Applies when you ${esc(y.appliesOn || 'restart the pilot on the 24h server')}.</div>` : ''}</div>
-      ${viaNote(y.setVia, 'pilot set budget 150')}
-      <div class="ghead">Restart</div>
-      <div class="group pad"><div class="setrow small sec">O piloto corre no servidor 24h e religa sozinho. Não ligues o piloto antigo no PC.</div></div>`;
-  }
-  const viaNote = (w, extra) => w && w.readOnly
-    ? `<div class="ro-note">${w.writeVia === 'none' ? esc(w.note || 'Not available in plan B') : 'Read-only here · use Telegram' + (w.command || extra ? ': <b>' + esc(extra || w.command) + '</b>' : '')}</div>` : '';
-
-  // ---------- HOME ----------
-  let range = 'LIVE';
-  function renderRanges() { $('ranges').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.r === range)); }
-  // t340u: the training lane is the main view (big number, today, chart, last trade); main desk is a secondary line
-  const trainHome = s => (!demoOn() && s && s.explore && s.explore.home) ? s.explore.home : null;
-  let viewMain = (() => { try { return localStorage.getItem('homeView') === 'mesa'; } catch (e) { return false; } })();
-  // Início cleanup (Kayke t369u): PAPER desk is the home view. The training-lane main view is off.
-  const trainView = () => false;
-  function drawTrain(h) {
-    const reveal = drawnRange !== 'TREINO'; drawnRange = 'TREINO';
-    window.DeskChart.line($('chart'), h.chart, {reveal, head: $('chart-head')});
-    $('chart-empty').textContent = h.chart.empty || '';
-    $('chart-empty').hidden = !h.chart.empty;
-  }
-  function renderTrainHome(s, h) {
-    odometer($('balance'), usd(h.stackUsd)); fitBalance();
-    pnlRow(h.stackUsd, h.todayStartUsd, h.todayPct, h.baseUsd ? h.stackUsd / h.baseUsd : 1);
-    $('balance').classList.toggle('red', (h.todayUsd || 0) < 0);
-    $('pnl-since').textContent = 'treino · desde as ' + hm(h.todayFromAt);
-    $('open-n').textContent = n0(h.open || 0);
-    renderOpenPos([]);
-    $('ranges').hidden = true;
-    drawTrain(h);
-    lastTradeLine(h.lastTrade, s);
-  }
-  function renderViewSw(s, h) {
-    const el = $('view-sw'); if (!el) return;
-    if (!h) { el.hidden = true; $('ranges').hidden = false; return; }
-    el.hidden = false;
-    const html = viewMain
-      ? `<button type="button" class="vs-btn" id="vs-go">Ver treino</button> <span class="ter">Banca de treino ${usd(h.stackUsd)}</span>`
-      : `<span class="ter">Banca de treino (PAPER) · início ${usd(h.baseUsd)} · Mesa principal ${usd(s.balance)}</span> <button type="button" class="vs-btn" id="vs-go">Ver mesa</button>`;
-    if (el.dataset.k !== html) { el.dataset.k = html; el.innerHTML = html; }
-    $('vs-go').onclick = () => {
-      viewMain = !viewMain; try { localStorage.setItem('homeView', viewMain ? 'mesa' : 'treino'); } catch (e) { /* private mode */ }
-      drawnRange = null; if (cache.state) renderState(cache.state); loadChart();
-    };
-  }
-  function renderDays(h) {
-    const hh = $('days-h'), box = $('days-box'); if (!hh || !box) return;
-    if (!h || !(h.days || []).length) { hh.hidden = true; box.hidden = true; return; }
-    hh.hidden = false; box.hidden = false;
-    const cmp = d => d.better == null ? '<span class="ter">—</span>'
-      : `<span class="${d.better ? 'green' : 'red'}">${d.better ? '▲ melhor' : '▼ pior'} ${xpMoney(d.vsPrevUsd)}</span>`;
-    const tag = (ok, a, b) => ok == null ? '' : `<span class="ter small">${ok ? a : b}</span>`;
-    const html = h.days.map(d => `<div class="day-row${d.current ? ' cur' : ''}"><b>${esc(d.label)}${d.current ? ' · hoje' : ''}</b>
-      <span class="xp-v">${xpMoney(d.pnlUsd)}</span>
-      <div class="day-sub small"><span class="ter">${n0(d.trades)} trades · ${n0(d.wins)} a ganhar</span> · ${cmp(d)} ${tag(d.lostLess, '· perdeu menos', '· perdeu mais')} ${tag(d.wonMore, '· ganhou mais', '· ganhou menos')}</div></div>`).join('');
-    if (box.dataset.k !== html) { box.dataset.k = html; box.innerHTML = html; }
-  }
-  function nightWindow(j) {
-    const w = (j && j.window) || {};
-    return {start: w.start || '22:00', end: w.end || '06:30'};
-  }
-  function lisbonParts(d) {
-    const parts = new Intl.DateTimeFormat('en-GB', {timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit'}).formatToParts(d || new Date());
-    const g = t => (parts.find(p => p.type === t) || {}).value;
-    return {h: +g('hour'), m: +g('minute'), date: g('year') + '-' + g('month') + '-' + g('day')};
-  }
-  function hmToMin(s) { const p = String(s || '').split(':'); return (+p[0]) * 60 + (+p[1] || 0); }
-  function renderNightStatus(j) {
-    const el = $('night-status'); if (!el) return;
-    const {start, end} = nightWindow(j);
-    const n = lisbonParts();
-    const cur = n.h * 60 + n.m, a = hmToMin(start), b = hmToMin(end);
-    const inNight = a > b ? (cur >= a || cur < b) : (cur >= a && cur < b);
-    el.textContent = inNight ? ('Noite PAPER a decorrer · ' + start + '–' + end + ' Lisboa') : ('Próxima noite ' + start + '–' + end + ' Lisboa');
-    el.hidden = false;
-  }
-  function renderNights(j) {
-    const box = $('nights-box'), hh = $('nights-h'); if (!box) return;
-    const {start, end} = nightWindow(j);
-    const nights = (j && j.nights) || [];
-    if (hh) hh.hidden = false;
-    box.hidden = false;
-    let html;
-    if (!nights.length) {
-      html = `<div class="day-row nights-empty" id="nights-empty">${esc((j && j.emptyText) || ('Primeira noite hoje ' + start + '–' + end))}</div>`;
-    } else {
-      html = nights.map(d => {
-        const n = Number(d.trades || 0), word = n === 1 ? 'trade' : 'trades';
-        return `<div class="day-row"><b>${esc(d.label || d.date || '')}</b>
-      <span class="xp-v">${xpMoney(d.pnl)}</span>
-      <div class="day-sub small"><span class="ter">${n0(n)} ${word}</span></div></div>`;
-      }).join('');
-    }
-    if (box.dataset.k !== html) { box.dataset.k = html; box.innerHTML = html; }
-  }
-  async function pollOvernight() {
-    let j = null;
-    try {
-      if (D) {
-        const r = await fetch(`${BASE}/d/${D}/overnight.json?t=${Date.now()}`, {cache: 'no-store', referrerPolicy: 'no-referrer'});
-        if (r.ok) j = await r.json();
-      }
-    } catch (e) { /* bucket file is optional */ }
-    if (!j) {
-      try {
-        const r = await fetch('overnight.json?t=' + Date.now(), {cache: 'no-store', referrerPolicy: 'no-referrer'});
-        if (r.ok) j = await r.json();
-      } catch (e) { /* keep last */ }
-    }
-    if (j) cache.overnight = j;
-    renderNightStatus(cache.overnight || j);
-    renderNights(cache.overnight || j || {});
-    setTimeout(pollOvernight, STATE_S * 1000);
+  function renderError() {
+    failN++; const n = Math.min(30, 2 * failN);
+    $('#working').classList.add('idle'); $('#working-label').textContent = 'Offline'; $('#live-dot').className = 'dot grey';
+    if (!lastState) { $('#screen-empty').hidden = false; $('#screen-empty').textContent = 'Desk offline'; }
+    $('#err').hidden = false; $('#err').textContent = `Desk offline · retrying in ${n}s · last update ${lastOk ? new Date(lastOk).toTimeString().slice(0, 5) : 'never'}`;
+    return n;
   }
   async function loadChart() {
-    if (trainView()) { drawTrain(trainHome(cache.state)); return; }
-    try { const c = await tryGet('chart/' + range); if (c) drawChart(c); } catch (e) { if (cache['chart/' + range]) drawChart(cache['chart/' + range]); }
-    $('ranges').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.r === range));
+    try { const d = await api('/chart?range=' + range); const ok = DeskChart.line($('#chart'), d); $('#chart-empty').hidden = ok; }
+    catch (e) { $('#chart-empty').hidden = false; }
   }
-  let drawnRange = null;
-  function drawChart(c, fresh) {
-    const reveal = fresh || drawnRange !== range; drawnRange = range;
-    window.DeskChart.line($('chart'), c, {reveal, head: $('chart-head'), pan: range === 'LIVE' && c.xMin == null});
-    if (range === 'LIVE') profitCheck('chart', (c.marks || []).filter(m => m.kind !== 'bought' && Number(m.usd != null ? m.usd : /^\+/.test(m.label || '') ? 1 : -1) > 0).map(m => 'a:' + (m.mint || '') + ':m' + Math.round(m.ts)));
-    $('chart-empty').textContent = c.empty || 'À espera do primeiro trade';
-    $('chart-empty').hidden = !c.empty && (c.points || []).length > 1;
+  $$('#ranges button').forEach(b => b.onclick = () => { $$('#ranges button').forEach(x => x.classList.remove('on')); b.classList.add('on'); range = b.dataset.r; loadChart(); });
+
+  // double buffered screen
+  let front = 'a';
+  function loadScreen() {
+    if (!lastState || !lastState.last_frame_at || lastState.private) return;
+    const back = front === 'a' ? 'b' : 'a', img = $('#screen-' + back);
+    img.onload = () => { img.classList.remove('back'); $('#screen-' + front).classList.add('back'); front = back; };
+    img.src = screenUrl();
+  }
+  $('#screen-wrap').onclick = () => openScreen();
+
+  function botIcons(activeBot) {
+    $('#bot-icons').innerHTML = Object.keys(COLORS).map(b => `<div class="bot-icon${b === activeBot ? ' active' : ''}" style="color:${COLORS[b]}" title="${b}"><svg viewBox="0 0 24 24" fill="${COLORS[b]}">${ICONS[b]}</svg></div>`).join('');
+  }
+  async function loadTerminal() {
+    try {
+      const d = await api('/terminal?after=' + termAfter);
+      const rows = PLANB ? d.rows.filter(r => r.id > termAfter) : d.rows; if (!rows.length) return;
+      const box = $('#terminal'); if (!termAfter) box.innerHTML = '';
+      rows.forEach(r => { termAfter = Math.max(termAfter, r.id);
+        const div = document.createElement('div'); div.className = 'ln';
+        div.innerHTML = `<span class="t">${hms(r.ts)}</span><span class="b" style="color:${COLORS[r.bot] || '#fff'}">${esc(r.bot.toUpperCase())}:</span><span>${esc(r.text)}</span>`;
+        box.appendChild(div); });
+      while (box.children.length > 200) box.firstChild.remove();
+      box.scrollTop = box.scrollHeight;
+      const last = rows[rows.length - 1]; botIcons(last.bot); $('#term-coin').textContent = last.symbol ? last.symbol + (last.mint ? ' ' + last.mint.slice(0, 4) + '…' + last.mint.slice(-4) : '') : '—';
+    } catch (e) { }
+  }
+  async function loadTradeDetails() {
+    try {
+      const d = await api('/activity'); const rows = d.rows || [];
+      renderActivity($('#home-activity'), rows.slice(0, 5));
+      const buy = rows.find(r => r.kind === 'bought' || r.kind === 'copied');
+      if (!buy) { $('#trade-details').innerHTML = '<div class="empty">Waiting for the first trade</div>'; return; }
+      const sells = rows.filter(r => r.kind === 'sold' || r.kind === 'stopped').slice(0, 3);
+      $('#trade-details').innerHTML = `<div class="props"><span>Coin</span><span>${esc(buy.title.replace(/^(Bought|Copied) /, ''))}</span><span>Direction</span><span>BUY</span><span>Size</span><span>${esc(buy.value)}</span><span>When</span><span>${hm(buy.ts)}</span></div>` +
+        sells.map(s => `<div class="journal"><b class="${String(s.value).startsWith('-') ? 'red' : 'green'}">${esc(s.title)}</b> @ ${hms(s.ts)} · ${esc(s.subtitle)} · <span class="${String(s.value).startsWith('-') ? 'red' : 'green'}">${esc(s.value)}</span></div>`).join('');
+    } catch (e) { }
   }
 
-  // P&L line under the balance: ▲ green when up, ▼ red when down, multiplier badge in the same colour
-  function pnlRow(bal, start, pctV, mult) {
-    const pnl = start != null && bal != null ? bal - start : null, up = (pnl == null ? (pctV || 0) : pnl) >= 0;
-    const t = $('today'); t.classList.remove('skel-i');
-    t.textContent = `${up ? '▲' : '▼'} ${pnl == null ? '—' : usd(Math.abs(pnl))} (${pctV == null ? '—' : Math.abs(Number(pctV)).toFixed(2) + '%'})`;
-    t.className = 'num today ' + (up ? 'green' : 'red');
-    const m = $('mult'); m.classList.remove('skel-i'); m.textContent = Number(mult || 1).toFixed(2) + '×'; m.classList.toggle('down', !up);
-  }
-  function renderState(s) {
-    if (!replayOn) tweenBalance(s.balance);
-    const mode = s.mode === 'DEMO' ? 'DEMO' : s.mode === 'LIVE' ? 'LIVE' : 'PAPER';
-    const fresh = Math.abs(Date.now() - new Date(s.ts).getTime()) < STATE_S * 4000;
-    const mp = $('paper');
-    const r = runOf(s);
-    const can = mode === 'DEMO' ? false : (mode === 'LIVE' ? true : r.canToggle !== false);
-    mp.className = 'mode-pill pill-paper-tag ' + mode.toLowerCase() + (fresh ? '' : ' stale');
-    mp.disabled = !can && mode !== 'LIVE';
-    mp.setAttribute('aria-disabled', can ? 'false' : 'true');
-    if (mode === 'DEMO') mp.setAttribute('aria-disabled', 'true');
-    $('mode-t').textContent = mode;
-    $('coin-paper').textContent = mode; $('coin-paper').hidden = mode === 'LIVE'; fitBalance();
-    renderRun(s);
-    pnlRow(s.balance, s.night_start, s.today_pct, s.multiplier);
-    $('open-n').textContent = n0(s.open_positions || 0);
-    renderOpenPos(s.openPositions || []);
-    $('updated').textContent = hms(new Date(s.ts));
-    const L = !demoOn() && s.live && s.live.bots ? s.live : null;
-    const $b = $('balance'); $b.classList.toggle('red', (s.pnl_usd != null ? s.pnl_usd : (s.balance || 0) - (s.night_start || 0)) < 0);
-    $('pnl-since').textContent = s.nightStartAt ? 'desde as ' + hm(s.nightStartAt) : '';
-    if ($('ranges')) $('ranges').hidden = false;
-    if (cache.overnight) { renderNightStatus(cache.overnight); renderNights(cache.overnight); }
-    if (L) { renderLive(s, L); return; }
-    lastTradeLine(null, s);
-    const running = ORDER.filter(a => (s.agents || {})[a] && s.agents[a].running).length;
-    if ($('agents-running')) { $('agents-running').textContent = String(running); $('agents-running').classList.remove('skel-i'); }
-    liveRows = null;
-    if ($('ag-rows')) {
-      const idle = {running: false, paused: false, text: 'à espera', metric: null, lastTs: 0};
-      $('ag-rows').innerHTML = ORDER.map(a => botRowHtml(a, (s.agents && s.agents[a]) ? {running: !!s.agents[a].running, paused: false, text: 'à espera', metric: null, lastTs: 0} : idle)).join('');
-    }
-  }
-
-  // ---------- PISTA DE TREINO (state.explore, Kayke t308u): separate PAPER-only lane, own numbers only ----------
-  function xpMoney(v) { if (v == null || isNaN(v)) return '<span class="ter">—</span>'; const n = Number(v); return `<span class="num ${n >= 0 ? 'green' : 'red'}">${n >= 0 ? '+' : '-'}$${Math.abs(n).toFixed(2)}</span>`; }
-  function xpPct(v) { return v == null || isNaN(v) ? '' : ` <span class="num ${v >= 0 ? 'green' : 'red'}">(${v >= 0 ? '+' : ''}${Number(v).toFixed(1)}%)</span>`; }
-  const XP_WHY = {stop: 'stop', trail: 'trail', timeout: 'tempo', pulled: 'liquidez saiu', 'dev dumping': 'dev vendeu'};
-  const XP_SRC = {band: 'liq baixa', chase: 'subiu muito'};
-  const XP_BOT = {scanner: 'Scanner', auditor: 'Auditor', analyst: 'Analyst', brain: 'Brain'};
-  function xpVotes(v) {
-    if (!v || !v.bots) return '';
-    return `<div class="xp-votes small">${Object.entries(v.bots).map(([b, x]) => `<span class="xp-vote ${x.yes ? 'green' : 'red'}" title="${esc(x.why || '')}">${esc(XP_BOT[b] || b)} ${x.yes ? '✓' : '✗'}</span>`).join(' ')} <span class="ter">${n0(v.yes || 0)}/4</span></div>`;
-  }
-  function latestVotes(x) {
-    if (!x) return null;
-    const rows = (x.openPositions || []).concat(x.closedTrades || []);
-    for (const r of rows) { if (r && r.votes && r.votes.bots) return r.votes; }
-    return null;
-  }
-  function renderVotesStrip(x) {
-    const box = $('xp-votes-strip'); if (!box) return;
-    const votes = latestVotes(x);
-    if (!votes) { box.hidden = true; box.innerHTML = ''; box.dataset.k = ''; return; }
-    const html = xpVotes(votes);
-    box.hidden = false;
-    if (box.dataset.k !== html) { box.dataset.k = html; box.innerHTML = html; }
-  }
-  function renderExplore(x) {
-    const h = $('xp-h'), box = $('xp-box');
-    if (!h || !box) return;
-    if (!x) { h.hidden = true; box.hidden = true; return; }
-    h.hidden = false; box.hidden = false;
-    $('xp-on').textContent = x.on ? '· ligada' : '· desligada';
-    $('xp-on').className = 'xp-on small ' + (x.on ? 'green' : 'ter');
-    const rule = `Liq mín. $${n0(x.minLiqUsd)} · score mín. ${n0(x.minScore)} · subida até +${n0(x.maxChaseH1Pct)}% em 1h · $${n0(x.sizeUsd)} por trade · à parte da desk`;
-    const follow = (x.followingList || []).map(f => `<span class="xp-chip">${esc(f.symbol)} <small class="ter">${n0(f.ageMin)} min</small></span>`).join('') || '<span class="ter small">nenhuma agora</span>';
-    const opens = (x.openPositions || []).map(p => `<div class="xp-row"><b>${esc(p.symbol)}</b> <span class="ter small">${p.session ? 'treino · ' : ''}${esc(XP_SRC[p.source] || (p.source === 'consenso' ? '' : p.source) || '')}${p.partial ? ' · 50% vendido' : ''}</span><span class="xp-v">${xpMoney(p.pnlUsd)}${xpPct(p.pnlPct)}</span></div>${xpVotes(p.votes)}`).join('') || '<div class="xp-row ter small">Nenhuma aberta</div>';
-    const done = (x.closedTrades || []).map(c => `<div class="xp-row"><b>${esc(c.symbol)}</b> <span class="ter small">${c.session ? 'treino · ' : ''}${esc(XP_WHY[c.reason] || c.reason || 'venda')}${c.closedAt ? ' · ' + esc(whenTxt(c.closedAt)) : ''}</span><span class="xp-v">${xpMoney(c.pnlUsd)}${xpPct(c.pnlPct)}</span></div>${xpVotes(c.votes)}`).join('') || '<div class="xp-row ter small">Ainda sem trades fechados</div>';
-    const t = x.treino || {};
-    const tr = t.started || t.on ? `<div class="xp-lbl">Treino por consenso ${t.on ? (t.continuous ? '<span class="green">· ligado · contínuo 24h (dia ' + n0(t.day || 1) + ', novo dia às ' + esc(hm(t.untilAt)) + ')</span>' : '<span class="green">· ligado até ' + esc(hm(t.untilAt)) + '</span>') : '<span class="ter">· desligado</span>'}</div>
-      <div class="xp-rule ter small">3 de 4 bots (Scanner, Auditor, Analyst, Brain) + anti-rug · sem filtros fixos · $${n0(t.sizeUsd || 25)} por trade · só PAPER</div>
-      <div class="xp-sub ter small">Votadas ${n0(t.voted || 0)} · compras ${n0(t.buys || 0)} · fechados ${n0(t.closed || 0)} (${n0(t.wins || 0)} a ganhar) · resultado ${xpMoney(t.totalUsd)}</div>
-      ${t.dailyStop && t.dailyStop.on ? `<div class="xp-sub small ${t.dailyStop.blocked ? 'red' : 'ter'}">Stop diário: ${xpMoney(t.dailyStop.realizedTodayUsd)} hoje vs -$${n0(t.dailyStop.limitUsd)}${t.dailyStop.blocked ? ' · sem compras novas até 08:00' : ''}</div>` : ''}
-      <div class="xp-sub ter small">Acerto: ${Object.entries(t.accuracy || {}).map(([b, a]) => `${esc(XP_BOT[b] || b)} ${n0(a.right)}/${n0(a.total)}`).join(' · ')}</div>` : '';
-    const html = `<div class="xp-rule ter small">${esc(rule)}</div>
-      <div class="xp-total"><span>Resultado total</span><b>${xpMoney(x.totalUsd)}</b></div>
-      <div class="xp-sub ter small">Fechados ${n0(x.closed || 0)} (${n0(x.wins || 0)} a ganhar) ${xpMoney(x.pnlUsd)} · abertas ${n0(x.open || 0)}/${n0(x.maxOpen || 5)} ${xpMoney(x.openPnlUsd)}</div>
-      ${tr}
-      <div class="xp-lbl">A seguir (${n0(x.following || 0)})</div><div class="xp-chips">${follow}</div>
-      <div class="xp-lbl">Abertas</div>${opens}
-      <div class="xp-lbl">Fechadas</div>${done}`;
-    if (box.dataset.k !== html) { box.dataset.k = html; box.innerHTML = html; }
-  }
-
-  // ---------- LIVE HOME (state.live): bot rows + activity feed, all from desk.db rows on the server ----------
-  const HOT_S = 15;            // a bot acted since the previous snapshot (the desk writes one every ~15 s)
-  const BADGE = {scanner: 'A ler', auditor: 'A auditar', analyst: 'A pontuar', executor: 'A comprar', risk: 'A vigiar', brain: 'A aprender', discover: 'A procurar'};
-  const WORK = {scanner: 'A ler Discover…', auditor: 'A auditar…', analyst: 'A pontuar…', executor: 'A dimensionar…', risk: 'A vigiar…', brain: 'A aprender…', discover: 'A procurar…'};
-  function botVerb(a, b, hot) {
-    b = b || {};
-    if (b.paused) return {dot: 'paused', text: 'pausado'};
-    if (hot) return {dot: 'on', text: (b.text || WORK[a] || 'À espera')};
-    if (b.waiting) return {dot: 'wait', text: 'À espera'};
-    if (!b.running) return {dot: 'stop', text: 'parado (sem sinal)'};
-    return {dot: 'wait', text: 'À espera'};
-  }
-  const UNIT = {scanner: 'hoje', auditor: 'hoje', executor: 'trades', brain: 'lições', discover: 'traders'};
-  let liveRows = null, liveEpoch = 0;
-  const whenTxt = iso => {
-    if (!iso) return '';
-    const d = new Date(iso), day = x => x.toLocaleDateString('en-GB', {timeZone: TZ});
-    const today = new Date(), y = new Date(Date.now() - 86400000);
-    return day(d) === day(today) ? hm(iso) : day(d) === day(y) ? 'ontem ' + hm(iso) : day(d).slice(0, 5) + ' ' + hm(iso);
+  // ---------- bots ----------
+  const BOT_LINE = {
+    scanner: (d) => { const k = d.rows.find(r => r.verdict === 'kill'), p = d.rows.find(r => r.verdict === 'pass');
+      return `<div class="count">${d.today} pools today</div>` + (k ? `<div class="line strike">${esc(k.text)}</div>` : '') + (p ? `<div class="line">${esc(p.text)}</div>` : ''); },
+    analyst: (d) => `<div class="count">${d.today} taken apart</div><div class="strips">${'<i></i>'.repeat(8)}</div>` + (d.rows[0] ? `<div class="line">${esc(d.rows[0].text)}</div>` : ''),
+    brain: (d) => `<div class="count">Sizing</div>` + (d.rows[0] ? `<div class="line">${esc(d.rows[0].text)}</div>` : '') + `<div class="line secondary small">80+ = full size · under 80 = half size</div>`,
+    executor: (d) => `<div class="count">${lastState ? lastState.trades : 0} trades</div>` + (d.rows[0] ? `<div class="line">${esc(d.rows[0].text)}</div>` : ''),
+    risk: (d) => `<div class="count">Guarding</div><div class="line"><span class="pill red small">stop -${(window.__set && window.__set.risk && window.__set.risk.stop_pct.value) || 25}%</span> <span class="pill green small">trail ${(window.__set && window.__set.executor && window.__set.executor.trail_pct.value) || 40}%</span></div>` + (d.rows[0] ? `<div class="line">${esc(d.rows[0].text)}</div>` : '')
   };
-  function lastTradeLine(t, s) {
-    const el = $('last-trade');
-    if (!t) { el.hidden = true; return; }
-    const up = (t.usd || 0) >= 0, why = {stop: 'stop', trail: 'trail', timeout: 'tempo', pulled: 'liquidez saiu'}[t.reason] || t.reason || 'venda';
-    const txt = `Último trade · ${esc(t.coin)} ${esc(why)} <b class="${up ? 'green' : 'red'}">${up ? '+' : '-'}${usd(Math.abs(t.usd || 0)).replace('-', '')}${t.pct != null ? ' (' + (t.pct >= 0 ? '+' : '') + Number(t.pct).toFixed(1) + '%)' : ''}</b> · ${esc(whenTxt(t.iso))}${t.mode && t.mode !== 'LIVE' ? ' · ' + esc(t.mode) : ''}`;
-    if (el.dataset.k !== txt) { el.dataset.k = txt; el.innerHTML = `<span class="lt-in">${txt}</span>`; }
-    el.hidden = false;
-  }
-  const RING = 2 * Math.PI * 15;
-  function ringOffset(a, b) {
-    if (a === 'analyst' && b && b.metric != null && !isNaN(Number(b.metric))) {
-      const p = Math.max(0, Math.min(100, Number(b.metric))) / 100;
-      return RING * (1 - p);
+  async function loadBots() {
+    const cards = [], full = [];
+    for (const b of Object.keys(COLORS)) {
+      let d = { rows: [], today: 0, paused: false };
+      try { d = await api(`/bots/${b}/decisions`); d.today = d.today ?? d.rows.length; } catch (e) { }
+      const alive = lastState && lastState.heartbeats && lastState.heartbeats[b] && Date.now() / 1000 - lastState.heartbeats[b] < 120;
+      const head = `<h3><span class="dot" style="background:${alive ? COLORS[b] : 'var(--ter)'}"></span><span style="color:${COLORS[b]}">${b[0].toUpperCase() + b.slice(1)}</span></h3>`;
+      const body = d.rows.length ? BOT_LINE[b](d) : '<div class="line secondary">Nothing yet tonight</div>';
+      cards.push(`<div class="botcard">${head}${body}</div>`);
+      full.push(`<div class="card">${head}<div class="row" style="min-height:44px"><div class="mid"><div>${d.today} today</div></div>
+        <label class="secondary small">${d.paused ? 'Paused' : 'Running'} <input type="checkbox" data-pause="${b}" ${d.paused ? '' : 'checked'} ${PLANB ? 'disabled' : ''}></label></div>
+        ${d.rows.map(r => `<div class="row" style="min-height:44px"><div class="mid"><div class="small">${esc(r.text)}</div><div>${hms(r.ts)}${r.coin_url ? ` · <a class="link" href="${esc(r.coin_url)}" target="_blank" rel="noopener">Open on FOMO</a>` : ''}</div></div></div>`).join('') || '<div class="empty">Nothing yet tonight</div>'}
+        <button class="link" data-go="account">Settings</button></div>`);
     }
-    if (b && b.running && !b.paused) return 0;
-    return RING * 0.92;
-  }
-  function botRowHtml(a, b) {
-    b = b || {};
-    const off = ringOffset(a, b);
-    const hot = !!b.hot;
-    const st = botVerb(a, b, hot);
-    const tx = `${(hot && b.coin) ? `${av(b.coin, b.image, b.mint, 'xs')}<b>${esc(b.coin)}</b> ` : ''}${esc(st.text)}`;
-    return `<button class="bot-row${hot ? ' on hot' : (st.dot === 'wait' ? ' on' : ' off')}" style="--ac:${AC[a]}" data-a="${a}" data-go="agents" data-anchor="ag-${a}">
-      <span class="bot-ava"><svg class="bot-ring" viewBox="0 0 36 36" aria-hidden="true"><circle class="bot-ring-bg" cx="18" cy="18" r="15" fill="none" stroke-width="2.4"/><circle class="bot-ring-fg" cx="18" cy="18" r="15" fill="none" stroke-width="2.4" stroke-dasharray="${RING.toFixed(2)}" stroke-dashoffset="${off.toFixed(2)}" pathLength="${RING.toFixed(2)}"/></svg>${icon(a)}</span>
-      <span class="bot-mid"><span class="bot-nm"><i class="hb ${st.dot}"></i>${esc(NAMES[a] || a)}</span>
-      <span class="bot-ln">${tx}</span></span>
-      <span class="bot-val num">${metricHtml(a, b)}</span></button>`;
-  }
-  function metricHtml(a, b) {
-    const v = b.metric;
-    if (a === 'analyst') return v == null ? '<span class="ter">—</span>' : `score ${n0(v)}`;
-    if (a === 'risk') return `DD ${Number(v || 0).toFixed(1)}%`;
-    return `${v == null ? '—' : n0(v)}<small>${UNIT[a] || ''}</small>`;
-  }
-  function renderLive(s, L) {
-    liveEpoch = L.epoch || (Date.now() / 1000);
-    lastTradeLine(L.lastTrade, s);
-    const order = (L.order || ORDER).filter(a => L.bots[a]);
-    if ($('agents-running')) {
-      $('agents-running').textContent = `${L.running}/${order.length}`;
-      $('agents-running').classList.remove('skel-i');
-    }
-    const box = $('ag-rows');
-    if (box) {
-      if (!liveRows || liveRows.join() !== order.join()) {
-        liveRows = order.slice();
-        box.innerHTML = order.map(a => botRowHtml(a, L.bots[a] || {})).join('');
-      }
-      for (const a of order) {
-        const b = L.bots[a], row = box.querySelector(`[data-a="${a}"]`); if (!row) continue;
-        const age = b.lastTs ? liveEpoch - b.lastTs : null;
-        const on = b.running && !b.paused;
-        const hot = on && ((age != null && age >= -2 && age < HOT_S) || (a === 'risk' && b.guarding > 0));
-        const st = botVerb(a, b, hot);
-        row.classList.toggle('hot', hot); row.classList.toggle('on', st.dot === 'on' || st.dot === 'wait'); row.classList.toggle('off', st.dot === 'stop');
-        const hb = row.querySelector('.hb'); if (hb) hb.className = 'hb ' + st.dot;
-        const tx = `${(hot && b.coin) ? `${av(b.coin, b.image, b.mint, 'xs')}<b>${esc(b.coin)}</b> ` : ''}<span class="${hot && b.tone === 'red' ? 'red' : hot && b.tone === 'green' ? 'green' : hot && b.tone === 'blue' ? 'ac' : ''}">${esc(st.text)}</span>`;
-        const el = row.querySelector('.bot-ln'); if (el && el.dataset.k !== tx) { el.dataset.k = tx; el.innerHTML = tx; flash(el); }
-        const mh = metricHtml(a, b), m = row.querySelector('.bot-val');
-        if (m && m.dataset.k !== mh) { const first = !m.dataset.k; m.dataset.k = mh; m.innerHTML = mh; if (!first) flash(m); }
-        if (m) m.className = 'bot-val num ' + (a === 'risk' && Number(b.metric || 0) > 0 ? 'red' : a === 'analyst' && b.tone ? b.tone : '');
-        const fg = row.querySelector('.bot-ring-fg');
-        if (fg) fg.style.strokeDashoffset = String(ringOffset(a, b));
-      }
-    } else {
-      liveRows = order.slice();
-    }
-    renderFeed(L.feed || []);
-  }
-  function flash(el) { if (RM()) return; el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
-
-  // Activity feed: new rows slide in at the top, one after another in time order. Each shows its real time.
-  const FEED_N = 8, ACTOR_C = {scanner: '#0a84ff', auditor: '#bf5af2', analyst: '#30d158', executor: '#ff9f0a', risk: '#ff453a', brain: '#5e5ce6', discover: '#64d2ff'};
-  let feedShown = null, feedQ = [], feedT = 0;
-  const hms2 = e => clock12(e.iso || e.ts);
-  function feedRow(e, enter) {
-    const trade = ['bought', 'sold', 'stopped', 'partial'].includes(e.kind);
-    const attr = trade ? `data-coin="${esc(e.mint)}"` : e.actor === 'auditor' ? `data-audit="${esc(e.mint)}"` : '';
-    const tag = attr ? 'button' : 'div';
-    const title = e.coin || (e.text || '');
-    const who = NAMES[e.actor] || e.actor || '';
-    let detail = e.text || '';
-    if (detail && who && detail.toLowerCase().startsWith(who.toLowerCase())) {
-      /* subtitle already names the actor */
-    } else if (detail && who) {
-      detail = who + ' · ' + detail;
-    } else {
-      detail = detail || who;
-    }
-    if (e.kind === 'kill' && !/cortada/i.test(detail)) detail = (detail ? detail + ' · ' : '') + 'cortada';
-    const when = hms2(e);
-    let sub = detail;
-    if (when) {
-      const parts = (detail || '').split(/\s*[·•]\s*/).filter(Boolean);
-      sub = parts.length ? [parts[0], when].concat(parts.slice(1)).join(' · ') : when;
-    }
-    let val = '', cls = '';
-    if (e.usd != null && trade) {
-      cls = e.kind === 'bought' ? '' : (e.usd >= 0 ? 'green' : 'red');
-      val = e.kind === 'bought' ? usd(e.usd) : (e.usd >= 0 ? '+' : '-') + usd(Math.abs(e.usd)).replace('-', '');
-    } else if (['kill', 'rejected', 'refused', 'skipped'].includes(e.kind)) {
-      val = 'Skipped';
-      cls = 'skip';
-    }
-    const skip = ['kill', 'rejected', 'refused', 'skipped'].includes(e.kind);
-    return `<${tag} class="item act${enter ? ' enter' : ''}${skip ? ' skip' : ''}" data-id="${esc(e.id)}" ${attr}>
-      <span class="act-av">${av(e.coin || e.text, e.image, e.mint)}${actBadge(e.kind === 'kill' || e.kind === 'refused' ? 'skipped' : e.kind)}</span>
-      <span class="mid"><div class="t">${esc(title)}</div><div class="s">${esc(sub)}</div></span>
-      <span class="v num ${cls}">${esc(val)}</span></${tag}>`;
-  }
-  function renderFeed(feed) {
-    const box = $('home-activity');
-    if (!box) { feedShown = new Set((feed || []).map(e => e.id)); return; }
-    if (!feed.length) { box.innerHTML = '<div class="empty-row">Sem atividade ainda</div>'; feedShown = new Set(); return; }
-    profitCheck('feed', feed.filter(e => (e.kind === 'sold' || e.kind === 'partial') && (e.usd || 0) > 0).map(e => e.id));
-    if (!feedShown) {                       // first look: show the newest rows, no animation
-      feedShown = new Set(feed.map(e => e.id));
-      box.innerHTML = feed.slice(0, FEED_N).map(e => feedRow(e, false)).join('');
-      return;
-    }
-    const fresh = feed.filter(e => !feedShown.has(e.id)).sort((a, b) => a.ts - b.ts);
-    fresh.forEach(e => feedShown.add(e.id));
-    if (!fresh.length) return;
-    feedQ.push(...fresh);
-    if (!feedT) pumpFeed();
-  }
-  function pumpFeed() {
-    const e = feedQ.shift(); if (!e) { feedT = 0; return; }
-    const box = $('home-activity');
-    if (box.querySelector('.empty-row')) box.innerHTML = '';
-    if (e.actor === 'auditor') box.querySelectorAll('.fd').forEach(r => { if (r.dataset.audit === e.mint && !r.dataset.coin) r.remove(); });
-    box.insertAdjacentHTML('afterbegin', feedRow(e, !RM()));
-    onActivityEvent(e);
-    while (box.children.length > FEED_N) box.lastElementChild.remove();
-    feedT = setTimeout(pumpFeed, RM() ? 0 : Math.max(250, Math.min(900, 4000 / (feedQ.length + 1))));
+    $('#carousel').innerHTML = cards.join(''); $('#bots-full').innerHTML = full.join('');
+    $$('[data-pause]').forEach(i => i.onchange = async () => { try { await api(`/bots/${i.dataset.pause}/${i.checked ? 'resume' : 'pause'}`, { method: 'POST' }); } catch (e) { alert(e.message); } loadBots(); });
+    bindGo();
   }
 
-  function onActivityEvent(e) {
-    const coin = e.coin || '';
-    if (e.kind === 'bought' || e.kind === 'buy') {
-      dropLivePill(coin ? ('Comprou ' + coin) : 'Comprou', e.actor);
-      toast(coin ? ('Comprou ' + coin) : 'Comprou');
-    } else if (['sold', 'partial', 'stopped'].includes(e.kind)) {
-      dropLivePill(coin ? ('Vendeu ' + coin) : 'Vendeu', e.actor);
-      toast(coin ? ('Vendeu ' + coin) : 'Vendeu');
-    } else if (['kill', 'rejected', 'refused', 'skipped'].includes(e.kind)) {
-      dropLivePill(coin ? ('Saltou ' + coin) : 'Saltou', e.actor);
-    }
+  // ---------- activity ----------
+  function renderActivity(el, rows) {
+    if (!rows.length) { el.innerHTML = '<div class="empty">Nothing yet tonight</div>'; return; }
+    el.innerHTML = rows.map(r => { const neg = String(r.value).startsWith('-');
+      const ic = { bought: '↗', sold: '$', stopped: '■', rejected: '×', copied: '⧉' }[r.kind] || '·';
+      return `<div class="row" data-kind="${r.kind}" data-mint="${esc(r.mint || '')}"><div class="ic">${ic}</div><div class="mid"><div>${esc(r.title)}</div><div>${esc(r.subtitle)}${r.coin_url ? ` · <a class="link" href="${esc(r.coin_url)}" target="_blank" rel="noopener">Open on FOMO</a>` : ''}</div></div><div class="val ${r.kind === 'sold' && !neg ? 'green' : neg || r.kind === 'stopped' ? 'red' : ''}">${esc(r.value)}</div></div>`; }).join('');
+    el.querySelectorAll('.row').forEach(row => row.onclick = e => { if (e.target.tagName === 'A' || !row.dataset.mint) return; row.dataset.kind === 'rejected' ? openAudit(row.dataset.mint) : openCoin(row.dataset.mint); });
   }
-  function dropLivePill(text, actor) {
-    const box = $('live-pills'); if (!box || !text) return;
-    const el = document.createElement('div');
-    el.className = 'live-pill';
-    el.style.setProperty('--ac', (ACTOR_C[actor] || '#30d158'));
-    const dot = document.createElement('i');
-    el.appendChild(dot);
-    el.appendChild(document.createTextNode(text));
-    box.appendChild(el);
-    setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, RM() ? 50 : 3400);
-    while (box.children.length > 3) box.removeChild(box.firstChild);
+  async function loadActivity(more) {
+    try { const d = await api('/activity' + (more && actBefore ? '?before=' + actBefore : '')); const rows = d.rows || [];
+      if (more) { const tmp = document.createElement('div'); renderActivity(tmp, rows); $('#activity-list').append(...tmp.children); } else renderActivity($('#activity-list'), rows);
+      actBefore = rows.length ? rows[rows.length - 1].id : null; $('#more-activity').hidden = PLANB || rows.length < 30;
+    } catch (e) { $('#activity-list').innerHTML = `<div class="err">${esc(e.message)}</div>`; }
   }
+  $('#more-activity').onclick = () => loadActivity(true);
 
-  // Pilot problems on Home too (same data as the Account tab, account.json): the brake line and a persistent error.
-  let alertAt = 0;
-  async function homeAlert(force) {
-    if (!force && Date.now() - alertAt < 30000) return; alertAt = Date.now();
-    const acc = await tryGet('account').catch(() => cache.account);
-    const pl = acc && acc.pilot, el = $('home-alert'), bits = [];
-    if (pl && pl.errorBrake && pl.errorBrake.active) bits.push(`<div class="ha red">Compras pausadas por erro · ${esc(pl.errorBrake.ticker || '?')} · -$${esc(Number(pl.errorBrake.lossUsd || 0).toFixed(2))}. Vendas e stops continuam. Para voltar a comprar: <b>/retomar</b> no Telegram.</div>`);
-    if (pl && pl.lastError && pl.errorPersistent) bits.push(`<div class="ha orange" data-go="account">Piloto com erro há ${Math.max(1, Math.round((pl.errorSinceS || 0) / 60))} min · ${esc(pl.lastError)}</div>`);
-    el.innerHTML = bits.join(''); el.hidden = !bits.length;
-  }
-  function renderOpenPos(rows) {
-    const el = $('open-pos');
-    if (!el) return;
-    if (!rows.length) { el.hidden = true; el.innerHTML = ''; return; }
-    el.hidden = false;
-    el.innerHTML = rows.map(p => {
-      const u = safe(p.link);
-      const trail = p.trailActive && p.trailLine != null
-        ? ` · trail ${price(p.trailLine)}${p.trailVsEntryPct != null ? ' (' + (p.trailVsEntryPct >= 0 ? '+' : '') + Number(p.trailVsEntryPct).toFixed(1) + '%)' : ''}`
-        : ' · trail off';
-      const since = p.sinceEntryPct != null ? `<span class="num ${p.sinceEntryPct >= 0 ? 'green' : 'red'}">${p.sinceEntryPct >= 0 ? '+' : ''}${Number(p.sinceEntryPct).toFixed(1)}%</span>` : '';
-      const tier = p.sizeTier ? ` · ${esc(p.sizeTier)}` : '';
-      const inner = `<span class="t">${esc(p.name || short(p.mint))}</span> ${usd(p.sizeUsd)}${tier} · stop ${price(p.stopPrice)}${trail} ${since}`;
-      return u ? `<a class="open-pos-row" href="${esc(u)}" target="_blank" rel="noopener noreferrer">${inner}</a>` : `<div class="open-pos-row">${inner}</div>`;
-    }).join('');
-  }
-  function dot(c) { return `<span class="dot ${c.paused ? 'paused' : c.running ? 'on' : ''}"></span>`; }
-  // live clock (Lisbon) in the status row
-  const tick = () => { $('clock').textContent = new Date().toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit', timeZone: TZ}); };
-  tick(); setInterval(tick, 1000);
-  // Agent rows (Grok Terminal look). One colour + icon per agent; every value from state.json cards (or demo.json).
-  const AC = {scanner: '#0a84ff', auditor: '#bf5af2', analyst: '#30d158', executor: '#ff9f0a', risk: '#ff453a', brain: '#5e5ce6', discover: '#64d2ff'};
-  const ICON = {
-    scanner: '<circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6" opacity=".7"/><path d="M12 12L18 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/>',
-    auditor: '<path d="M12 2.8l7.5 2.8v5.6c0 4.7-3.2 8.4-7.5 10-4.3-1.6-7.5-5.3-7.5-10V5.6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M8.6 12.2l2.4 2.4 4.6-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
-    analyst: '<path d="M2.5 12h3l2.2-5.5 3.6 11 3-8 1.9 2.5h5.3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
-    executor: '<rect x="5" y="8" width="14" height="11" rx="3.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 8V4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="3.8" r="1.4" fill="currentColor"/><circle cx="9.3" cy="13.3" r="1.5" fill="currentColor"/><circle cx="14.7" cy="13.3" r="1.5" fill="currentColor"/><path d="M3 12.5v3M21 12.5v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
-    risk: '<path d="M12 2.8l7.5 2.8v5.6c0 4.7-3.2 8.4-7.5 10-4.3-1.6-7.5-5.3-7.5-10V5.6z" fill="currentColor" opacity=".22"/><path d="M12 2.8l7.5 2.8v5.6c0 4.7-3.2 8.4-7.5 10-4.3-1.6-7.5-5.3-7.5-10V5.6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 7.5v5.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="16.2" r="1.3" fill="currentColor"/>',
-    brain: '<circle cx="12" cy="12" r="8.6" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="11" r="1.4" fill="currentColor"/><circle cx="15" cy="11" r="1.4" fill="currentColor"/><circle cx="12" cy="15.2" r="1.4" fill="currentColor"/><path d="M9 11h6M9 11l3 4.2M15 11l-3 4.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
-    discover: '<circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M15.4 15.4L20.5 20.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="10.5" cy="9" r="2" fill="currentColor"/><path d="M7 13.6c.8-1.6 2-2.3 3.5-2.3s2.7.7 3.5 2.3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
-  };
-  const icon = a => `<span class="ag-ico" style="color:${AC[a]};background:${AC[a]}22"><svg viewBox="0 0 24 24" aria-hidden="true">${ICON[a]}</svg></span>`;
-  const n0 = v => v == null || isNaN(v) ? '—' : Number(v).toLocaleString('en-US');
-  const recent = (iso, s) => iso && Math.abs(Date.now() - new Date(iso).getTime()) < s * 1000;
-  function av(name, img, mint, cls) {   // coin image only if the JSON carries a plain https URL, else a coloured initial
-    const u = imgFor(mint, img), ch = esc(([...String(name || mint || '?').replace(/^[^A-Za-z0-9]+/, '')][0] || '?').toUpperCase());
-    let h = 0; for (const x of String(mint || name || '')) h = (h * 31 + x.charCodeAt(0)) >>> 0;
-    return u ? `<span class="cav ${cls || ''}"><img src="${esc(u)}" alt="" referrerpolicy="no-referrer" loading="lazy"></span>` : `<span class="cav ${cls || ''}" style="background:hsl(${h % 360} 55% 38%)">${ch}</span>`;
-  }
-  function agRow(a, c, s, hotAgent) {
-    const off = c.paused ? 'paused' : c.running ? '' : 'no heartbeat';
-    let line = '', val = '', vc = '', hot = false, coin = null;
-    if (a === 'scanner') {
-      const f = (c.feed || [])[0];
-      if (f) { coin = f; line = `<b>${esc(f.name || short(f.mint))}</b> ${f.verdict === 'kill' ? `<span class="red">${esc(f.reason || 'killed')}</span>` : `liq ${usdK(f.liquidityUsd)} <span class="ac">→ auditor</span>`}`; hot = recent(f.ts, 120) && f.verdict !== 'kill'; }
-      else line = esc(c.empty || 'listening for new launches');
-      val = `${n0(c.pools)}<small>pools</small>`;
-    } else if (a === 'auditor') {
-      const cur = c.current, st = cur && cur.strips, ok = st ? st.filter(x => x.state === 'pass').length : null, red = st && st.some(x => x.state === 'red');
-      if (cur) { coin = cur; line = `<b>${esc(cur.name || short(cur.mint))}</b> ${esc(cur.status || '')}`; hot = !!(st && st.some(x => x.state === 'pending')); }
-      else line = c.enabled === false ? 'off' : 'waiting';
-      val = ok == null ? '<span class="ter">—</span>' : `${ok}<small>/8</small>`; vc = red ? 'red' : ok === 8 ? 'green' : '';
-      if (!st) { val = `${n0(c.rejected)}<small>rejected</small>`; vc = ''; }
-    } else if (a === 'analyst') {
-      const has = c.score != null && !isNaN(c.score), nm = c.name || (c.mint ? coinName(c.mint) : '');
-      const pass = c.pass != null ? c.pass : has && c.score >= (c.greenFrom || 70);
-      if (has) { coin = {name: nm, mint: c.mint, image: c.image}; line = `<b>${esc(nm || short(c.mint))}</b> ${c.pass == null && c.score < (c.greenFrom || 70) ? 'scoring…' : pass ? '<span class="green">pass</span>' : '<span class="red">chumbou</span>'} · ${c.why && !pass ? esc(c.why) : 'from ' + esc(c.greenFrom || 70)}`;
-        val = `score ${Math.round(c.score)}`; vc = pass ? 'green' : c.pass === false ? 'red' : ''; hot = recent(c.ts, 120); }
-      else { line = 'waiting'; val = '<span class="ter">—</span>'; }
-    } else if (a === 'executor') {
-      const l = c.last;
-      if (l) { coin = l; const done = l.status === 'bought';
-        line = done ? `filled <b>${esc(l.name || short(l.mint))}</b> via ${esc(l.venue || (s.mode === 'LIVE' ? 'Jupiter' : 'paper'))}` : `buying <b>${esc(l.name || short(l.mint))}</b>…`;
-        val = usd(l.sizeUsd); vc = done ? '' : 'ac'; hot = !done || recent(l.ts, 120); }
-      else { line = c.stackPctSetting != null ? `${esc(c.stackPctSetting)}% of stack per trade` : 'waiting'; val = '<span class="ter">—</span>'; }
-    } else if (a === 'risk') {
-      const g = c.guarding || 0, stopTxt = c.stopPct != null ? `stop at -${esc(c.stopPct)}%` : esc(((c.pills || [])[0] || {}).text || '');
-      line = g ? `guarding ${g} · ${stopTxt}${/trail on/i.test(c.label || '') ? ' · <span class="green">trail on</span>' : ''}` : ((c.lastExit || c.label) && c.lastExitCoin ? `${esc(String(c.lastExit || c.label).toLowerCase())} <b>${esc(c.lastExitCoin)}</b> · ${stopTxt}` : `no position · ${stopTxt}`);
-      const dd = Number(c.ddPct || 0); val = `DD ${dd.toFixed(1)}%`; vc = dd > 0 ? 'red' : ''; hot = g > 0;
-    } else if (a === 'brain') {
-      const nProp = c.proposals || 0, lessons = c.lessons || 0;
-      line = esc(c.label || c.headline || 'a aprender com os trades e as recusas');
-      val = nProp ? `${n0(nProp)}<small>propostas</small>` : `${n0(lessons)}<small>lições</small>`;
-      vc = nProp ? 'ac' : '';
-      hot = nProp > 0;
-    }
-    if (hotAgent) hot = hotAgent === a;
-    if (off) hot = false;
-    return `<button class="ag-row${hot ? ' hot' : ''}" style="--ac:${AC[a]}" data-go="agents" data-anchor="ag-${a}">${icon(a)}
-      <span class="ag-mid"><span class="ag-nm"><i class="hb ${c.paused ? 'paused' : c.running ? 'on' : ''}"></i>${esc(NAMES[a])}${off ? ` <span class="ter small">· ${esc(off)}</span>` : ''}</span>
-      <span class="ag-ln">${coin ? av(coin.name, coin.image, coin.mint, 'xs') : ''}<span class="ag-tx">${line}</span></span></span>
-      <span class="ag-val num ${vc}">${val}</span></button>`;
-  }
-  // Activity rows: coin avatar (image if the JSON has one, else a coloured initial) + a small badge for the kind
-  const TRADE = ['bought', 'sold', 'stopped'];
-  function actRow(r) {
-    const val = r.value || '', cls = r.kind === 'stopped' || /^-/.test(val) ? 'red' : (r.kind === 'sold' && /^\+/.test(val) ? 'green' : '');
-    const attr = r.mint ? (r.opens === 'coin' ? `data-coin="${esc(r.mint)}"` : `data-audit="${esc(r.mint)}"`) : '';
-    const nm = String(r.title || '').replace(/^(Bought|Sold|Stopped|Rejected|Skipped)\s+/, '');
-    let sub = String(r.subtitle || '').replace(/\s*[·•]\s*\d{1,2}:\d{2}(\s*[AP]M)?\s*$/i, '').trim();
-    const when = clock12(r.tsIso || r.ts);
-    if (when && !sub.includes(when)) {
-      const parts = sub.split(/\s*[·•]\s*/).filter(Boolean);
-      sub = parts.length ? [parts[0], when].concat(parts.slice(1)).join(' · ') : when;
-    }
-    const mainVal = val.split(' · ')[0] || '';
-    return `<button class="item act" ${attr}><span class="act-av">${av(nm, r.image, r.mint)}${actBadge(r.kind)}</span>
-      <span class="mid"><div class="t">${esc(r.title)}</div><div class="s">${esc(sub)}</div></span><span class="v num ${cls}">${esc(mainVal)}</span></button>`;
-  }
-  function renderHomeActivity(a) {
-    const rows = (a && a.rows) || [];
-    if ($('trades-n')) $('trades-n').textContent = rows.filter(r => TRADE.includes(r.kind)).length;
-    if (!$('home-activity')) return;
-    if (feedShown && cache.state && cache.state.live && !demoOn()) { profitCheck('act', rows.filter(r => r.kind === 'sold' && /^\+/.test(r.value || '')).map(r => 'a:' + (r.mint || '') + ':' + r.id + ':' + r.title)); return; }
-    $('home-activity').innerHTML = rows.length ? rows.slice(0, 6).map(actRow).join('') : `<div class="empty-row">${esc((a && a.empty) || 'Sem atividade ainda')}</div>`;
-    profitCheck('act', rows.filter(r => r.kind === 'sold' && /^\+/.test(r.value || '')).map(r => 'a:' + (r.mint || '') + ':' + r.id + ':' + r.title));
-  }
-  // ---------- confetti when a trade closes in profit (never on first load, never with reduced motion) ----------
-  const profitSeen = {}; let confT = 0;
-  function profitCheck(src, keys) {   // one memory per source (activity rows, chart marks): the first look only remembers
-    const seenS = profitSeen[src]; if (!seenS) { profitSeen[src] = new Set(keys); return; }
-    const fresh = keys.filter(k => !seenS.has(k)); fresh.forEach(k => seenS.add(k));
-    if (fresh.length) confetti();
-  }
-  function confetti() {
-    if (RM() || Date.now() - confT < 6000) return; confT = Date.now();
-    const cv = $('confetti'), dpr = window.devicePixelRatio || 1, W = innerWidth, H = innerHeight;
-    cv.width = W * dpr; cv.height = H * dpr; cv.hidden = false;
-    const c = cv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const cols = ['#30d158', '#0a84ff', '#ffd60a', '#ff9f0a', '#bf5af2', '#ffffff'];
-    const ps = Array.from({length: 140}, () => ({x: W / 2 + (Math.random() - .5) * 60, y: H * .28, vx: (Math.random() - .5) * 13, vy: -Math.random() * 13 - 4,
-      r: Math.random() * Math.PI, vr: (Math.random() - .5) * .4, w: 5 + Math.random() * 5, h: 8 + Math.random() * 6, col: cols[Math.random() * cols.length | 0]}));
-    const t0 = performance.now();
-    const step = now => {
-      const k = (now - t0) / 2600; c.clearRect(0, 0, W, H);
-      for (const p of ps) { p.vy += .32; p.vx *= .985; p.x += p.vx; p.y += p.vy; p.r += p.vr;
-        c.save(); c.globalAlpha = Math.max(0, 1 - k * k); c.translate(p.x, p.y); c.rotate(p.r); c.fillStyle = p.col; c.fillRect(-p.w / 2, -p.h / 2, p.w, p.h); c.restore(); }
-      if (k < 1) requestAnimationFrame(step); else { c.clearRect(0, 0, W, H); cv.hidden = true; }
-    };
-    requestAnimationFrame(step);
-  }
-
-  // ---------- AGENTS TAB ----------
-
-  function brainPanel(c, d) {
-    const s = (d && d.summary) || c || {};
-    const props = s.proposals || [];
-    const setups = s.setups || c.setups || [];
-    const refusals = (s.refusals || c.refusals || []).filter(x => x.known > 0);
-    const bits = [];
-    if (props.length) {
-      bits.push(`<div class="brain-box"><div class="bh">Propostas (precisas do teu ok)</div>${
-        props.map(p => `<p class="brain-prop">${esc(p.text)}</p>`).join('')}</div>`);
-    } else {
-      bits.push(`<div class="brain-empty">${esc(s.headline || c.label || 'Ainda a aprender. Só proponho com 20 casos no mesmo grupo.')}</div>`);
-    }
-    if (setups.length) {
-      bits.push(`<div class="brain-box"><div class="bh">Trades por grupo</div>${
-        setups.map(b => `<div class="brain-stat"><span class="k">${esc(b.label || b.bucket)}</span><span class="v num">${b.n} · acerto ${b.winRate == null ? '—' : b.winRate + '%'} · PnL ${b.avgPnlPct == null ? '—' : (b.avgPnlPct >= 0 ? '+' : '') + b.avgPnlPct + '%'}</span></div>`).join('')}</div>`);
-    }
-    if (refusals.length) {
-      bits.push(`<div class="brain-box"><div class="bh">Recusas com preço depois</div>${
-        refusals.slice(0, 8).map(b => `<div class="brain-stat"><span class="k">${esc(b.label || b.bucket)}</span><span class="v num">${b.known} conhecidas · ${b.ran} subiram · ${b.rugged} caíram</span></div>`).join('')}</div>`);
-    }
-    return bits.join('') || `<div class="brain-empty">Ainda a aprender</div>`;
-  }
-  async function renderAgents() {
-    const s = cache.state || {}, out = [];
-    const ds = await Promise.all(ORDER.map(a => tryGet(`agents/${a}/decisions`).catch(() => cache[`agents/${a}/decisions`])));
-    ORDER.forEach((a, i) => {
-      const c = (s.cards || {})[a] || {}, d = ds[i] || {}, p = d.pause || {readOnly: true, writeVia: 'telegram'};
-      const locked = p.locked || (a === 'risk' && c.pauseLocked);
-      const cmd = locked ? 'locked while a position is open' : (p.command || c.pauseCommand || `${c.paused ? 'resume' : 'pause'} ${NAMES[a]}`);
-      out.push(`<div class="acard" id="ag-${a}"><div class="acard-h">${dot(c)}<span class="nm" style="color:${COLORS[a]}">${esc(c.title || NAMES[a])}</span>
-        <span class="sw-wrap" data-ro="${locked ? 'Risk is locked while a position is open' : 'Read-only here · send “' + cmd + '” in Telegram'}"><span class="switch ro ${c.paused ? '' : 'on'}" role="switch" aria-checked="${!c.paused}" aria-disabled="true"></span></span></div>
-        <div class="cnt num">${c.paused ? 'Paused' : c.running ? 'Running' : 'No heartbeat'} · ${d.todayCount == null ? '—' : d.todayCount} today</div>
-        ${locked ? '<div class="ro-note">Pause is locked while a position is open</div>' : viaNote(p, cmd)}
-        ${a === 'brain' ? brainPanel(c, d) : ((d.decisions || []).length ? d.decisions.slice(0, 20).map(x => {
-          const bad = /kill|reject|stop|missed|skipped|loss|rugged/.test(x.verdict), good = /pass|cleared|bought|trail|win|ran|proposta/.test(x.verdict);
-          const u = safe(x.link);
-          const label = x.coin || (x.mint ? short(x.mint) : (x.verdict === 'proposta' ? 'proposta' : '—'));
-          return `<div class="dec"><span class="tm">${hm(x.time)}</span>${u ? `<a class="cn" href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>` : `<span class="cn">${esc(label)}</span>`}
-            <span class="vr ${bad ? 'bad' : good ? 'good' : ''}">${esc(x.verdict)}${x.reason ? ' · ' + esc(x.reason) : ''}</span></div>`; }).join('')
-          : `<div class="dec"><span></span><span class="sec">${a === 'scanner' ? 'Listening for graduations' : a === 'auditor' ? 'No coin taken apart yet' : 'No decisions yet'}</span><span></span></div>`)}
-        ${a === 'brain' ? '<div class="ro-note">O Brain não muda filtros nem tamanhos. Só propõe, e tu decides.</div>'
-          : `<button class="link-row" data-go="account" data-anchor="set-${a}">Settings <span class="chev">›</span></button>`}</div>`);
-    });
-    $('agents-list').innerHTML = out.join('');
-  }
-
-  // ---------- ACTIVITY TAB ----------
-  let actRows = [], actOlder = null;
-  async function renderActivity(more) {
-    if (!more) {
-      const a = await tryGet('activity').catch(() => cache.activity);
-      actRows = (a && a.rows) || []; actOlder = null;
-      if (a && a.before) { const k = Math.floor((a.before - 2) / 30); actOlder = {page: k, before: a.before}; }
-    } else if (actOlder) {
-      const p = await tryGet('activity/p' + actOlder.page).catch(() => null);
-      if (p) { const rows = p.rows.filter(r => r.id < actOlder.before); actRows = actRows.concat(rows);
-        const lastId = rows.length ? rows[rows.length - 1].id : actOlder.before;
-        actOlder = p.older ? {page: actOlder.page - 1, before: lastId} : null; if (actOlder && actOlder.page < 0) actOlder = null; }
-    }
-    $('activity-list').innerHTML = actRows.length ? actRows.map(actRow).join('') : `<div class="empty-row">${esc((cache.activity && cache.activity.empty) || 'Nothing yet tonight')}</div>`;
-    $('activity-more').hidden = !actOlder;
-  }
-  $('activity-more').onclick = () => renderActivity(true);
-
-  // ---------- ACCOUNT TAB ----------
-  const LBL = {scanner: 'Scanner', auditor: 'Auditor', analyst: 'Analyst', analyst_rules: 'Analyst (rules)', executor: 'Executor', risk: 'Risk', brain: 'Brain', desk: 'Desk'};
-  async function renderAccount() {
-    const [acc, st] = await Promise.all([tryGet('account').catch(() => cache.account), tryGet('settings').catch(() => cache.settings)]);
-    if (!acc) { $('account-body').innerHTML = skelBlocks(4); return; }
-    const prof = safe(acc.profile_url), sign = safe(acc.SIGNUP_URL), tg = acc.telegram || {};
-    let h = `<div class="group">
-      <div class="row" data-ro="Read-only here · send “paper” or “live” in Telegram"><span class="k">Mode</span><span class="seg"><span class="${acc.mode === 'PAPER' ? 'on' : ''}">PAPER</span><span class="${acc.mode === 'LIVE' ? 'on' : ''}">LIVE</span></span></div>
-      <div class="row"><span class="k">Stack</span><span class="v num">${usd(acc.stack)}</span></div></div>
-      ${viaNote(acc.modeSwitch, 'paper | live')}${acc.modeSwitch && acc.modeSwitch.liveNeeds ? `<div class="ghead">LIVE: ${esc(acc.modeSwitch.liveNeeds)}</div>` : ''}${viaNote(acc.stackEdit)}
-      <div class="group">
-      ${prof ? `<a class="row" href="${esc(prof)}" target="_blank" rel="noopener noreferrer"><span class="k">Your FOMO profile</span><span class="v">${esc(acc.fomo_handle || '')} <span class="chev">›</span></span></a>` : ''}
-      ${sign ? `<button class="row" id="invite" data-url="${esc(sign)}"><span class="k">Invite a friend</span><span class="chev">›</span></button>` : ''}</div>
-      <div class="ghead">Telegram</div><div class="group">
-      <div class="row"><span class="k">Telegram</span><span class="v ${tg.connected ? 'green' : 'red'}">${tg.connected ? 'Connected' : 'Not connected'}</span></div>
-      <div class="row" data-ro="Read-only here · send “test push” in Telegram"><span class="k" style="color:var(--ter)">Send test push</span><span class="v small">via Telegram</span></div></div>
-      ${viaNote(tg.testPush)}
-      <div class="ghead">Notifications</div><div class="group"><div class="row"><span class="k" style="color:var(--ter)">Enable notifications</span><span class="v small">Not available</span></div></div>
-      <div class="ro-note">${esc((acc.webPush && acc.webPush.note) || 'plan B: no web push, Telegram only')}</div>`;
-    h += pilotCards(acc.pilot);
-    if (st && st.groups) {
-      const w = runOf(cache.state || {}).wallet || {};
-      if (w.pilotSizeNote || w.livePilotSizeUsd != null) {
-        h += `<div class="ghead">Tamanho do piloto</div><div class="group"><div class="setrow small sec">${esc(pilotSizeLine(w) || w.pilotSizeNote || '')} Os caps (max_usd_per_trade, max_trade_pct, sol_reserve) não mudam. Com 0 SOL o DRY continua a usar o equity PAPER.</div></div>`;
-      }
-      h += `<div class="ghead">Settings</div>` + viaNote(st, st.command);
-      const tc = st.ticketCheck;
-      if (tc) h += `<div class="group"><div class="row"><span class="k">Ticket check</span><span class="v num ${tc.status === 'ok' ? 'green' : tc.status === 'bump' ? '' : 'red'}">${tc.status === 'ok' ? 'OK' : esc(tc.status)}</span></div>
-        <div class="row"><span class="k small sec">min stack = ${usd(tc.minTicket)} / ${esc(tc.stackPct)}%</span><span class="v num">${usd(tc.minStack)}</span></div>
-        ${tc.message ? `<div class="setrow small ${tc.status === 'skip' || tc.status === 'no_stack' ? 'red' : 'sec'}">${esc(tc.message)}</div>` : ''}</div>`;
-      for (const [g, keys] of Object.entries(st.groups)) {
-        h += `<div class="ghead" id="set-${esc(g)}">${esc((st.labels || {})[g] || LBL[g] || g)}</div><div class="group">` +
-          Object.entries(keys).map(([k, v]) => setRow(k, v)).join('') + '</div>';
-      }
-      if (st.changeLog && st.changeLog.length) h += `<div class="ghead">Change log</div><div class="group">${st.changeLog.slice(0, 10).map(c => `<div class="row"><span class="k small">${esc(c.key || '')}</span><span class="v small num">${esc(c.old)} → ${esc(c.new)} · ${esc(c.who || '')} · ${hm(c.ts)}</span></div>`).join('')}</div>`;
-    }
-    $('account-body').innerHTML = h;
-  }
-  function setRow(k, v) {
-    const val = v.value, ro = `data-ro="Read-only here · send “set ${esc(v.key)} to …” in Telegram"`;
-    let ctl;
-    if (v.kind === 'bool') ctl = `<span class="sw-wrap" ${ro}><span class="switch ro ${val ? 'on' : ''}" aria-disabled="true"></span></span>`;
-    else if (v.kind === 'enum') ctl = `<span class="seg" ${ro}>${(v.choices || []).map(c => `<span class="${c === val ? 'on' : ''}">${esc(c)}</span>`).join('')}</span>`;
-    else if (typeof val === 'number' && v.min != null && v.max != null) {
-      const step = v.kind === 'int' ? 1 : (v.max - v.min <= 1 ? 0.01 : 'any');
-      return `<div class="setrow" ${ro}><div class="top"><span>${esc(k)}</span><span class="mm">${esc(v.range || (v.min + '–' + v.max))}</span></div>
-        <div class="ctl"><input type="range" min="${v.min}" max="${v.max}" step="${step}" value="${val}" disabled aria-label="${esc(v.key)}"><input class="numf" value="${esc(val)}" disabled aria-label="${esc(v.key)} value"></div></div>`;
-    } else ctl = `<input class="numf" value="${esc(val == null ? '' : val)}" disabled aria-label="${esc(v.key)}" style="width:150px">`;
-    return `<div class="setrow"><div class="top"><span>${esc(k)}</span>${ctl}</div></div>`;
-  }
-
-  // ---------- COIN SCREEN ----------
-  async function renderCoin(mint, first) {
-    if (first) { $('coin-navt').textContent = ''; $('coin-body').innerHTML = skelBlocks(3, true); }
-    let c;
-    try { c = await tryGet('coin/' + mint); } catch (e) { c = cache['coin/' + mint]; if (!c) return; }
-    if (!c) { $('coin-navt').textContent = short(mint); $('coin-body').innerHTML = `<div class="empty-row">No data for this coin yet</div>`; return; }
-    $('coin-navt').textContent = c.name || short(mint);
-    const p = c.position, x = c.exitLines, st = c.stats || {}, u = safe(c.coin_url);
-    const sh = c.shield ? `<a class="shield ${c.shield === '8/8' ? '' : 'bad'}" data-audit="${esc(mint)}" href="#">${esc(c.shield)}</a>` : `<a class="shield none" data-audit="${esc(mint)}" href="#">not audited</a>`;
-    let h = `<div class="coin-h"><span class="nm">${esc(c.name || short(mint))}</span>${sh}</div>
-      <div class="coin-sub">${esc(c.subtitle || ((c.symbol || '?') + ' · Solana'))}</div>
-      <div class="price num">${price(c.price)}</div>
-      ${p && p.open && p.sinceEntryPct != null ? `<div class="since num ${p.sinceEntryPct >= 0 ? 'green' : 'red'}">${p.sinceEntryPct >= 0 ? '▲' : '▼'} ${Math.abs(p.sinceEntryPct).toFixed(2)}% since entry</div>` : `<div class="since sec small">${c.priceAt ? 'price at ' + hm(c.priceAt) : 'No price yet'}</div>`}
-      <div class="candle-wrap"><canvas id="candles" aria-label="1-minute candles"></canvas></div>
-      <div class="stats"><div><div class="k">Market cap</div><div class="v num">${usdK(st.marketCapUsd)}</div></div><div><div class="k">Liquidity</div><div class="v num">${usdK(st.liquidityUsd)}</div></div>
-      <div><div class="k">24h volume</div><div class="v num">${usdK(st.volume24hUsd)}</div></div><div><div class="k">Holders</div><div class="v num">${esc(st.holders == null ? 'n/a' : st.holders)}</div></div></div>`;
-    if (p) {
-      h += `<div class="pos"><div class="t">Your position · ${usd(p.sizeUsd)}${p.sizeTier ? ' · ' + esc(p.sizeTier) : ''} in · ${esc(p.agent || 'Executor')}</div>
-        <div class="ln"><span class="sec">Entry</span><span class="num">${price(p.entryPrice)}</span></div>
-        ${p.open ? '' : `<div class="ln"><span class="sec">Closed · ${esc(p.exitReason)}</span><span class="num ${(p.pnlUsd || 0) >= 0 ? 'green' : 'red'}">${usd(p.pnlUsd)}</span></div>`}</div>`;
-      if (p.open && x) h += `<div class="pos"><div class="t">Exit</div>
-        <div class="ln"><span class="sec">Stop line · -${esc(x.stopPct)}%</span><span class="num red">${price(x.stopPrice)}</span></div>
-        <div class="ln"><span class="sec">Trail line · ${esc(x.trailPct)}%${x.trailActive && x.trailVsEntryPct != null ? ' · ' + (x.trailVsEntryPct >= 0 ? '+' : '') + Number(x.trailVsEntryPct).toFixed(1) + '% vs entry' : ''}</span><span class="num ${x.trailActive ? 'green' : 'ter'}">${x.trailActive ? price(x.trailLine) : 'from ' + price(x.trailStartPrice)}</span></div>
-        <div class="ln"><span class="sec">Time left to timeout</span><span class="num">${left(x.timeLeftS)}</span></div></div>`;
-    }
-    if (u) h += `<div class="sticky-cta"><a class="btn-fomo ${p && p.open ? 'sell' : ''}" href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(c.button || (p && p.open ? 'Sell on FOMO' : 'Buy on FOMO'))}</a></div>`;
-    $('coin-body').innerHTML = h;
-    window.DeskChart.candles($('candles'), c.candles, x && x.riskTrailingStop, p && p.entryPrice);
-  }
-
-  // ---------- AUDITOR SCREEN: 8 discs read by a cyan beam ----------
-  let beam = {mint: null, at: 0, timer: 0};
-  async function renderAudit(mint, first) {
-    if (first) { clearTimeout(beam.timer); beam = {mint, at: 0, timer: 0}; $('audit-body').innerHTML = skelBlocks(3, true); }
-    let a = null;
-    if (mint) { try { a = await tryGet('audit/' + mint); } catch (e) { a = cache['audit/' + mint]; if (!a && !first) return; } }
-    if (!a || a.empty) {
-      $('audit-body').innerHTML = `<div class="disc-stage">${Array.from({length: 8}, () => '<div class="disc nc"></div>').join('')}</div>
-        <div class="verdict"><div class="h">${esc((a && a.empty) || 'No coin taken apart yet')}</div><div class="s">The Auditor checks 8 layers before anything reaches the Executor.</div></div>`;
-      return;
-    }
-    const u = safe(a.coin_url), t = a.toggle || {};
-    const known = a.layers.map(l => l.value != null);
-    if (first || !$('disc-stage')) {
-      $('audit-body').innerHTML = `<div class="coin-h"><a class="nm" data-coin="${esc(mint)}" href="#">${esc(a.name || short(mint))}</a></div>
-        <div class="disc-stage" id="disc-stage">${a.layers.map(l => `<div class="disc" id="disc-${l.n}"><i></i></div>`).join('')}<div class="beam" id="beam"></div></div>
-        <div class="verdict" id="verdict"></div><div class="group" id="layers"></div>
-        <div class="group"><div class="row" data-ro="Read-only here · send “set auditor.enabled to off” in Telegram (it asks twice)"><span class="k">Take apart before buying</span>
-        <span class="sw-wrap"><span class="switch ro ${t.value ? 'on' : ''}" aria-disabled="true"></span></span></div></div>${viaNote(t, 'set auditor.enabled to on|off')}
-        ${u ? `<a class="btn-fomo" href="${esc(u)}" target="_blank" rel="noopener noreferrer">Open on FOMO</a>` : ''}`;
-      if (RM()) beam.at = 8;
-    }
-    const paint = () => {
-      a.layers.forEach((l, i) => {
-        const d = $('disc-' + l.n); if (!d) return; const shown = i < beam.at;
-        d.className = 'disc' + (shown ? (l.value === 'not checked' ? ' nc' : l.pass ? ' pass' : ' red') : '');
-        d.firstChild.textContent = shown && l.value !== 'not checked' ? (l.pass ? '✓' : '✕') : '';
-      });
-      $('layers').innerHTML = a.layers.map((l, i) => { const shown = i < beam.at;
-        return `<div class="lrow"><span class="st ${shown && l.value !== 'not checked' ? (l.pass ? 'pass' : 'red') : ''}">${shown && l.value !== 'not checked' ? (l.pass ? '✓' : '✕') : l.n}</span>
-          <span><div>${esc(l.name)}</div>${shown && l.source ? `<div class="src">${esc(l.source)}</div>` : ''}</span>
-          <span class="lv ${!shown || l.value === 'not checked' ? 'nc' : ''}">${shown ? esc(l.value) : (known[i] ? '' : 'waiting…')}</span></div>`; }).join('');
-      const done = beam.at >= 8 || (a.result && a.result.status !== 'running' && a.layers.slice(beam.at).every(l => l.value == null || l.value === 'not checked'));
-      const r = a.result;
-      $('verdict').innerHTML = done && r && r.status !== 'running'
-        ? `<div class="h ${r.status === 'rejected' ? 'red' : 'green'}">${esc(r.headline)}</div><div class="s">${esc(r.sub || '')}</div>`
-        : `<div class="h">taking apart...</div><div class="s">${a.layersChecked || 0}/8 layers</div>`;
-      const bm = $('beam'), stage = $('disc-stage');
-      if (bm && stage) { const d = $('disc-' + Math.min(8, beam.at + 1)); bm.classList.toggle('on', !done && !RM());
-        if (d) bm.style.top = (d.offsetTop + d.offsetHeight / 2 - 1) + 'px'; }
-    };
-    const stepBeam = () => {
-      paint();
-      if (beam.at >= 8 || beam.mint !== mint) return;
-      if (!known[beam.at]) return;                 // the server hasn't sent this layer: the beam waits on it
-      beam.timer = setTimeout(() => { beam.timer = setTimeout(() => { beam.at++; stepBeam(); }, 150); }, 350);
-    };
-    clearTimeout(beam.timer); stepBeam();
-  }
-
-  // ---------- SEARCH ----------
-  $('search-in').addEventListener('input', renderSearch);
-  async function renderSearch() {
-    const idx = cache.index || await tryGet('index').catch(() => null);
-    const q = $('search-in').value.trim().toLowerCase(), coins = (idx && idx.coins) || [];
-    const hits = coins.filter(c => !q || (c.name || '').toLowerCase().includes(q) || (c.symbol || '').toLowerCase().includes(q) || c.mint.toLowerCase().includes(q)).slice(0, 50);
-    $('search-list').innerHTML = hits.length ? hits.map(c => `<button class="item" data-coin="${esc(c.mint)}"><span class="ico" style="background:#2c2c2e;color:#fff">${esc((c.name || '?')[0])}</span>
-      <span class="mid"><div class="t">${esc(c.name || short(c.mint))}</div><div class="s">${esc(c.symbol ? c.symbol + ' · ' : '')}${esc(short(c.mint))}</div></span><span class="v sec small">${c.audit ? 'audited' : ''}</span></button>`).join('')
-      : `<div class="empty-row">${coins.length ? 'No coin matches' : 'No coins seen tonight yet'}</div>`;
-  }
-
-  // ---------- BELL: unread pushes (signal, fill, exit) ----------
-  const PUSH = ['signal', 'fill', 'exit'];
-  const seen = () => Number(localStorage.getItem('desk_seen') || 0);
-  const coinName = m => { const c = ((cache.index || {}).coins || []).find(x => x.mint === m); return c ? c.name : short(m); };
-  function pushText(e) {
-    const n = e.name || coinName(e.mint), sign = (e.pnlUsd || 0) >= 0 ? '+' : '-';
-    if (e.kind === 'signal') return `Buy ${n} · ${usd(e.sizeUsd)}${e.stackPct != null ? ' · ' + e.stackPct + '% of stack' : ''}`;
-    if (e.kind === 'fill') return `Bought ${n} · ${usd(e.sizeUsd)}`;
-    if (e.reason === 'stop') return `${n} hit the -${e.stopPct}% stop · -${usd(Math.abs(e.pnlUsd || 0)).slice(1)}`;
-    return `Sold ${n} · ${sign}${usd(Math.abs(e.pnlUsd || 0))} (${e.pct >= 0 ? '+' : ''}${Number(e.pct || 0).toFixed(1)}%)`;
-  }
-  function renderBellDot() { const ev = (cache.events && cache.events.events) || []; $('bell-dot').hidden = !ev.some(e => PUSH.includes(e.kind) && e.seq > seen()); }
-  function renderBell() {
-    const ev = ((cache.events && cache.events.events) || []).filter(e => PUSH.includes(e.kind)).reverse(), s = seen();
-    $('bell-list').innerHTML = ev.length ? ev.map(e => { const u = safe(e.link);
-      return `<div class="item"><span class="ico" style="background:${e.kind === 'exit' ? ((e.pnlUsd || 0) >= 0 ? '#00d35a' : '#ff453a') : '#0a84ff'}">${e.seq > s ? '•' : ''}</span>
-        <span class="mid" data-coin="${esc(e.mint || '')}"><div class="t">Grok Bot · ${hm(e.ts)}</div><div class="s">${e.mode === 'PAPER' ? 'PAPER · ' : ''}${esc(pushText(e))}</div></span>
-        ${u ? `<a class="v" style="color:var(--green);min-height:44px;display:flex;align-items:center" href="${esc(u)}" target="_blank" rel="noopener noreferrer">${e.kind === 'exit' ? 'Sell on FOMO' : 'Buy on FOMO'}</a>` : ''}</div>`; }).join('')
-      : `<div class="empty-row">No pushes yet tonight</div>`;
-    const top = (cache.events && cache.events.lastSeq) || 0; if (top > s) localStorage.setItem('desk_seen', String(top)); renderBellDot();
-  }
-
-  // ---------- loading blocks in the final layout ----------
-  function skelBlocks(n, coin) {
-    return (coin ? '<div class="skel-block" style="height:34px;width:60%;margin-top:12px"></div><div class="skel-block" style="height:52px;width:50%;margin-top:12px"></div><div class="skel-block" style="height:240px;margin-top:12px"></div>' : '') +
-      Array.from({length: n}, () => '<div class="skel-block" style="height:64px;margin-top:12px"></div>').join('');
-  }
-  function loadingLayout() {
-    if ($('ag-rows')) $('ag-rows').innerHTML = Array.from({length: 5}, () => '<div class="bot-row skel-block"></div>').join('');
-    if ($('home-activity')) $('home-activity').innerHTML = Array.from({length: 3}, () => '<div class="item"><span class="ico skel-block"></span><span class="mid"><div class="skel-i" style="width:55%">x</div><div class="skel-i" style="width:35%;margin-top:4px">x</div></span></div>').join('');
-    $('agents-list').innerHTML = skelBlocks(5).replace(/height:64px/g, 'height:180px');
-    $('activity-list').innerHTML = Array.from({length: 6}, () => '<div class="item"><span class="ico skel-block"></span><span class="mid"><div class="skel-i" style="width:55%">x</div></span></div>').join('');
-    $('account-body').innerHTML = skelBlocks(5);
-    window.DeskChart.line($('chart'), {points: []});
-  }
-
-  // ---------- refresh loop ----------
-  async function refreshScreen(first) {
-    if (!D || replayOn) return;
-    const v = visible(), top = stack[stack.length - 1];
+  // ---------- account ----------
+  async function loadAccount() {
     try {
-      if (v === 'tab-home') { if (cache.state) renderState(cache.state); await loadChart(); renderHomeActivity(await tryGet('activity')); homeAlert(); }
-      else if (v === 'tab-agents') await renderAgents();
-      else if (v === 'tab-activity') await renderActivity(false);
-      else if (v === 'tab-account') await renderAccount();
-      else if (v === 'scr-coin') await renderCoin(top.arg, first);
-      else if (v === 'scr-audit') await renderAudit(top.arg, first);
-      else if (v === 'scr-search') { if (first) $('search-in').value = ''; await tryGet('index'); await renderSearch(); }
-      else if (v === 'scr-bell') renderBell();
-    } catch (e) { if (e && e.net) fail(); else console.error(e); }
+      const [a, s] = await Promise.all([api('/account'), api('/settings')]); window.__set = s.settings;
+      $('#account-top').innerHTML = `
+        <div class="row"><div class="mid"><div>Mode</div><div>${a.mode === 'PAPER' ? 'PAPER · no real money' : 'LIVE'}</div></div><span class="pill ${a.mode === 'PAPER' ? 'orange' : 'green'}">${a.mode}</span></div>
+        <div class="row"><div class="mid"><div>Cash</div><div>${a.mode === 'PAPER' ? 'simulated' : 'FOMO'}</div></div><div class="val">${money(a.cash)}</div></div>
+        <div class="row"><div class="mid"><div>Your FOMO profile</div><div>${esc(a.fomo_handle || 'handle not set (STEP 1)')}</div></div><a class="link" href="${esc(a.profile_url)}" target="_blank" rel="noopener">Open</a></div>
+        <div class="row"><div class="mid"><div>Invite a friend</div><div>FOMO signup link</div></div><button class="link" id="invite">Share</button></div>
+        <div class="row"><div class="mid"><div>Vault</div><div>${esc(a.vault)}</div></div></div>
+        <div class="row"><div class="mid"><div>Pushes</div><div>${esc(a.push)}</div></div><button class="link" id="testpush">Send test push</button></div>
+        <div class="row"><div class="mid"><div>Notifications</div><div>Home screen only</div></div><button class="link" id="enablepush">Enable</button></div>`;
+      $('#invite').onclick = () => navigator.share ? navigator.share({ url: a.signup_url, title: 'FOMO' }) : window.open(a.signup_url);
+      $('#testpush').onclick = async () => { try { await api('/push', { method: 'POST', body: JSON.stringify({ test: true }) }); } catch (e) { alert(e.message); } };
+      $('#enablepush').onclick = enablePush;
+      $('#settings').innerHTML = Object.entries(s.settings).map(([grp, items]) => `<div class="setgroup"><h4>${grp}</h4>${Object.entries(items).map(([k, it]) => {
+        const id = grp + '.' + k, num = typeof it.default === 'number';
+        return `<div class="setrow"><span>${k.replace(/_/g, ' ')}</span><input ${num ? 'type="number" step="any"' : 'type="text"'} value="${esc(it.value)}" data-key="${id}" ${PLANB ? 'disabled' : ''}>${num ? `<input type="range" min="${it.min}" max="${it.max}" step="${(it.max - it.min) > 50 ? 1 : 0.1}" value="${it.value}" data-range="${id}" ${PLANB ? 'disabled' : ''}>` : ''}</div>`; }).join('')}</div>`).join('');
+      $$('[data-range]').forEach(r => r.oninput = () => { $(`[data-key="${r.dataset.range}"]`).value = r.value; });
+      $$('[data-range]').forEach(r => r.onchange = () => save(r.dataset.range, r.value));
+      $$('[data-key]').forEach(i => i.onchange = () => save(i.dataset.key, i.value));
+      const picks = a.picks || [];
+      $('#picks').innerHTML = `<div class="card"><div class="row"><div class="mid"><div>Copy picks</div><div>${esc(a.copy_picks)}</div></div></div></div>` +
+        (picks.length ? picks.map(p => `<div class="card"><b>#${p.rank} ${esc(p.handle)}</b> <span class="green">7d +$${Math.round(p.pnl_7d)}</span> <span class="green">30d +$${Math.round(p.pnl_30d)}</span><div class="secondary small">${esc(p.why || '')}</div></div>`).join('') : '<div class="card empty">No picks yet (off until STEP 15 passes)</div>');
+    } catch (e) { $('#account-top').innerHTML = `<div class="err">${esc(e.message)}</div>`; }
   }
-  function fail() { if (offline && retryAt > Date.now()) return; failN++; offline = true; retryAt = Date.now() + Math.min(STATE_S * failN, 60) * 1000; errRow(); }
-  let stateT = 0, lastChartAt = Date.now(), lastChartTs = null;
-  async function pollState() {
-    clearTimeout(stateT);
-    try {
-      const s = await get('state');
-      if (replayOn) { lastOk = new Date(s.ts); offline = false; failN = 0; errRow(); stateT = setTimeout(pollState, HOME_POLL_S * 1000); return; }
-      try { renderState(s); } catch (err) { console.error(err); }
-      const age = (Date.now() - new Date(s.ts).getTime()) / 1000;
-      if (age > STATE_S * 4) throw new Error('stale');
-      lastOk = new Date(s.ts); offline = false; failN = 0; errRow();
-      const fast = visible() === 'tab-home' && !document.hidden;
-      if (fast && s.live && lastChartTs !== s.ts && Date.now() - lastChartAt > 14000) { lastChartAt = Date.now(); lastChartTs = s.ts; loadChart(); }
-      stateT = setTimeout(pollState, (fast ? HOME_POLL_S : STATE_S) * 1000);
-    } catch (e) {
-      if (cache.state) lastOk = lastOk || new Date(cache.state.ts);
-      fail(); stateT = setTimeout(pollState, retryAt - Date.now());
-    }
-  }
-  let lastSeq = 0;
-  async function pollEvents() {
-    try {
-      const e = await get('events');
-      if (e.lastSeq !== lastSeq) {
-        const fresh = (e.events || []).filter(x => x.seq > lastSeq); lastSeq = e.lastSeq;
-        if (!demoOn() && !replayOn && fresh.some(x => x.kind === 'balance')) { const b = fresh.filter(x => x.kind === 'balance').pop(); if (cache.state && b.value != null) { tweenBalance(b.value); } }
-        renderBellDot();
-        const v = visible(), top = stack[stack.length - 1];
-        if (v === 'scr-audit' && fresh.some(x => x.kind === 'audit_layer' && top && x.mint === top.arg)) renderAudit(top.arg);
-        if (v === 'tab-home' && fresh.some(x => x.kind !== 'audit_layer')) pollState();
-      }
-    } catch (err) { /* state.json drives the offline row */ }
-    setTimeout(pollEvents, EVENTS_S * 1000);
-  }
-  setInterval(() => { if (D && !offline) refreshScreen(); }, SCREEN_S * 1000);
-  addEventListener('resize', () => { if (cache['chart/' + range]) drawChart(cache['chart/' + range]); });
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && D) { pollState(); refreshScreen(); } });
-
-  // ---------- DEMO poll ----------
-  function demoBar() {
-    const b = $('demo-bar'), on = demoOn();
-    document.body.classList.toggle('demo', on); b.hidden = !on; if (!on) return;
-    const st = DEMO.step || {}, pc = Math.max(0, Math.min(100, 100 * (DEMO.elapsed || 0) / (DEMO.total || 240)));
-    $('demo-t').textContent = `DEMO · passo ${st.n || 1}/${st.of || 6} · simulação, nada é real`;
-    $('demo-s').textContent = st.text || '';
-    $('demo-p').style.width = pc.toFixed(1) + '%';
-    b.dataset.agent = st.agent || '';
-  }
-  $('demo-bar').onclick = () => {
-    if (!demoOn() || !DEMO.focus) return;
-    const ag = DEMO.step && DEMO.step.agent, m = DEMO.focus, top = stack[stack.length - 1];
-    if (ag === 'auditor') { if (!(top && top.scr === 'scr-audit' && top.arg === m)) push('scr-audit', m); }
-    else if (ag === 'executor' || ag === 'risk') { if (!(top && top.scr === 'scr-coin' && top.arg === m)) push('scr-coin', m); }
-    else go('home');
-  };
-  async function pollDemo() {
-    try {
-      const r = await fetch(`${BASE}/d/${D}/demo.json?t=${Date.now()}`, {cache: 'no-store', referrerPolicy: 'no-referrer'});
-      DEMO = r.ok ? await r.json() : null;
-    } catch (e) { /* keep the last copy; freshness decides */ }
-    const on = demoOn();
-    if (on) {
-      demoWas = true; demoBar();
-      cache.state = DEMO.files.state;
-      try { renderState(cache.state); lastOk = new Date(); offline = false; failN = 0; errRow(); } catch (err) { console.error(err); }
-      refreshScreen();
-    } else if (demoWas) { location.reload(); return; }   // demo over: back to the real desk, exactly as before
-    else demoBar();
-    setTimeout(pollDemo, on ? 2000 : 5000);
+  async function save(key, value) { try { await api('/settings', { method: 'POST', body: JSON.stringify({ key, value }) }); } catch (e) { alert(e.message); loadAccount(); } }
+  async function enablePush() {
+    if (!('serviceWorker' in navigator) || !window.matchMedia('(display-mode: standalone)').matches) { alert('Add Grok Bot to your Home Screen first'); return; }
+    alert('Web push needs the VAPID key on the desk; Telegram is the default notifier.');
   }
 
-  // ---------- COPY-PAPER (copytrade/copy_watch.py): its own file, copy.json. A separate VIRTUAL copy-trade book that
-  // follows two public wallets. Never touches the main balance, chart, activity or the night report. Hidden when the
-  // file is missing or cleared (active false). FOMO links pass through from the JSON (links.py) and are never built here.
-  const CP_KIND = {copy_buy: ['Copiou compra', '#0a84ff'], copy_sell: ['Copiou venda', '#00d35a'], stop: ['Stop -18%', '#ff453a'],
-    detected_buy: ['Trader comprou', '#8e7cff'], detected_sell: ['Trader vendeu', '#8e7cff'], seen_sell: ['Trader vendeu', '#2c2c2e'],
-    skip: ['Não copiado', '#2c2c2e'], note: ['Nota', '#2c2c2e']};
-  const ago = iso => { if (!iso) return '—'; const s = Math.max(0, (Date.now() - new Date(iso)) / 1000);
-    return s < 60 ? Math.round(s) + 's' : s < 3600 ? Math.round(s / 60) + ' min' : Math.round(s / 3600) + ' h'; };
-  function renderCopy(j) {
-    const sec = $('copy-sec');
-    if (!sec) return;
-    if (!j || j.active !== true) { sec.hidden = true; return; }
-    sec.hidden = false;
-    const fresh = j.running && Math.abs(Date.now() / 1000 - Number(j.epoch || 0)) < 120;
-    const pc = j.pnl >= 0 ? 'green' : 'red';
-    const trs = (j.traders || []).map(t => `<div class="cp-tr"><span class="cp-rk">#${esc(t.rank)}</span><span class="cp-m"><div class="t">${esc(t.handle)}</div>
-      <div class="s">${esc(t.wallet)} · última tx ${ago(t.lastTx)} · ${n0(t.swapsSeen)} swaps vistos</div></span>
-      <span class="cp-v">${n0(t.copies)} cópias<div class="s">${n0(t.open)} aberta${t.open === 1 ? '' : 's'}</div></span></div>`).join('');
-    const pos = (j.positions || []).map(p => { const u = safe(p.coin_url), c = p.pnl >= 0 ? 'green' : 'red';
-      const inner = `${av(p.symbol || p.name, p.image, p.mint)}<span class="cp-m"><div class="t">${esc(p.symbol || short(p.mint))} <span class="ter small">${esc(p.trader)}</span></div>
-        <div class="s">entrada ${price(p.entry)} · agora ${price(p.price)} · stop ${price(p.stop)}</div></span>
-        <span class="cp-v ${c}">${usd(p.pnl)}<div class="s">${pct(p.pnlPct)} · ${usd(p.valueUsd)}</div></span>`;
-      return u ? `<a class="cp-tr" href="${esc(u)}" target="_blank" rel="noopener noreferrer">${inner}</a>` : `<div class="cp-tr">${inner}</div>`; }).join('');
-    const ev = (j.events || []).slice(0, 8).map(e => { const [t, col] = CP_KIND[e.kind] || [e.kind, '#2c2c2e'];
-      const v = e.pnl != null ? `<span class="${e.pnl >= 0 ? 'green' : 'red'}">${usd(e.pnl)}</span>` : e.usd != null ? usd(e.usd) : '';
-      return `<div class="cp-tr"><span class="ico" style="width:28px;height:28px;border-radius:50%;flex:none;background:${col}"></span><span class="cp-m"><div class="t">${esc(t)} ${esc(e.symbol || (e.mint ? short(e.mint) : ''))}</div>
-        <div class="s">${esc(e.trader || '')} · ${hm(e.ts)}${e.note ? ' · ' + esc(e.note) : ''}</div></span><span class="cp-v">${v}</span></div>`; }).join('');
-    $('copy-body').innerHTML = `<div class="cp-top"><div><div class="cp-bal num">${usd(j.equity)}</div>
-        <div class="cp-run">virtual · começou com ${usd(j.startUsd)} · ${fresh ? '<b>a vigiar</b>' : '<b class="off">parado</b>'}</div></div>
-        <div class="cp-pnl num ${pc}">${usd(j.pnl)}<div class="small">${pct(j.pnlPct)}</div></div></div>
-      <div class="cp-note">${esc(j.note || '')} Até ${usd(j.maxPerCopy, 0)} por cópia · stop -${esc(j.stopPct)}% · caixa ${usd(j.cash)}</div>
-      <div class="cp-h">Traders seguidos</div>${trs}
-      <div class="cp-h">Posições abertas</div>${pos || '<div class="cp-empty">Nenhuma cópia aberta. À espera que um deles compre.</div>'}
-      <div class="cp-h">Últimos eventos</div>${ev || '<div class="cp-empty">Ainda nada desde o início.</div>'}`;
+  // ---------- overlays ----------
+  function overlay(html) { $('#overlay-body').innerHTML = `<button class="link" id="ov-close">‹ Back</button>` + html; $('#overlay').hidden = false; $('#ov-close').onclick = () => $('#overlay').hidden = true; }
+  function openScreen() { overlay(`<div class="screen-wrap" style="margin-top:8px;border-radius:12px;overflow:hidden;touch-action:pinch-zoom"><img src="${screenUrl()}" style="object-fit:contain"></div><a class="btn ghost" style="display:flex;align-items:center;justify-content:center;text-decoration:none" href="${lastState && lastState.positions[0] ? esc(lastState.positions[0].link) : 'https://fomo.family/r/profeta7zz'}" target="_blank" rel="noopener">Open on FOMO</a>`); }
+  async function openCoin(mint) {
+    overlay('<div class="empty">Loading…</div>');
+    try { const d = await api('/coin/' + mint); const c = d.coin || {}, p = d.position;
+      const age = c.migrated_at ? Math.round((Date.now() / 1000 - c.migrated_at) / 3600) + 'h old' : '';
+      const since = p && d.price ? (100 * (d.price / p.entry_price - 1)) : null;
+      overlay(`<h2 style="margin:8px 0 0">${esc(c.name || c.symbol || mint.slice(0, 6))} <span class="pill orange">${esc(d.mode)}</span></h2>
+        <div class="secondary">${esc(c.symbol || '')} · Solana · ${age} ${d.shield ? `<span class="chip">🛡 ${d.shield}</span>` : ''}</div>
+        <div class="big" style="font-size:48px;margin-top:8px">${d.price != null ? '$' + Number(d.price).toPrecision(4) : '—'}</div>
+        ${since != null ? `<div class="${since >= 0 ? 'green' : 'red'}">${since >= 0 ? '▲' : '▼'} ${Math.abs(since).toFixed(1)}% since entry</div>` : ''}
+        <div class="card"><canvas id="cc" height="200" style="width:100%"></canvas><div id="cc-empty" class="empty" hidden>No candles yet</div></div>
+        <div class="stats3"><div><small>Market cap</small>${d.market_cap != null ? '$' + Math.round(d.market_cap).toLocaleString() : '—'}</div><div><small>Liquidity</small>${d.liquidity != null ? '$' + Math.round(d.liquidity).toLocaleString() : '—'}</div><div><small>Holders</small>${d.holders ?? '—'}</div></div>${d.score != null ? `<div class="secondary small" style="margin-top:6px">Analyst score ${d.score}</div>` : ''}
+        ${p ? `<div class="card">Your position · ${money(p.size_usd)} in · Executor${p.closed_at ? ' · closed: ' + esc(p.exit_reason) : ''}</div>` : ''}
+        <a class="btn ghost" style="display:flex;align-items:center;justify-content:center;text-decoration:none" href="${esc(d.coin_url)}" target="_blank" rel="noopener">Open on FOMO</a>
+        ${p && !p.closed_at && !PLANB ? '<button class="btn red" id="sellnow">Sell now</button>' : ''}`);
+      $('#cc-empty').hidden = DeskChart.candles($('#cc'), d.candles, p && !p.closed_at ? p.stop_price : null);
+      const sb = $('#sellnow'); if (sb) sb.onclick = () => sellSheet(mint, c.symbol);
+    } catch (e) { overlay(`<div class="err">${esc(e.message)}</div>`); }
   }
-  async function pollCopy() {
-    try {
-      const r = await fetch(`${BASE}/d/${D}/copy.json?t=${Date.now()}`, {cache: 'no-store', referrerPolicy: 'no-referrer'});
-      renderCopy(r.ok ? await r.json() : null);
-    } catch (e) { /* keep what is on screen */ }
-    setTimeout(pollCopy, STATE_S * 1000);
+  function sellSheet(mint, sym) {
+    $('#sheet-body').innerHTML = `<h3>Sell ${esc(sym)}</h3>${[25, 50, 100].map(p => `<button class="btn ghost" data-pct="${p}">${p}%</button>`).join('')}<button class="btn ghost" id="sh-cancel">Cancel</button>`;
+    $('#sheet').hidden = false; $('#sh-cancel').onclick = () => $('#sheet').hidden = true;
+    $$('[data-pct]').forEach(b => b.onclick = () => { $('#sheet-body').innerHTML = `<h3>Sell ${b.dataset.pct}% of ${esc(sym)} now?</h3><button class="btn red" id="confirm-sell">Confirm sell</button><button class="btn ghost" id="sh-cancel2">Cancel</button>`;
+      $('#sh-cancel2').onclick = () => $('#sheet').hidden = true;
+      $('#confirm-sell').onclick = async () => { try { await api('/sell/' + mint, { method: 'POST', body: JSON.stringify({ pct: +b.dataset.pct, confirm: true }) }); } catch (e) { alert(e.message); } $('#sheet').hidden = true; openCoin(mint); }; });
+  }
+  async function openAudit(mint) {
+    overlay('<div class="empty">Loading…</div>');
+    try { const d = await api('/audit/' + mint); const c = d.coin || {};
+      overlay(`<h2 style="margin:8px 0 0">${esc(c.symbol || mint.slice(0, 6))} · Audit</h2><div class="discs" id="discs">${d.layers.map(l => `<div class="disc na" data-pass="${l.pass}"><b>${l.layer}</b><span>${esc(l.name)}</span><small>${esc(l.value_text)}</small></div>`).join('') || '<div class="empty">No audit yet</div>'}</div>
+        <div class="card">${esc(d.social)}${d.score && d.score.score != null ? ' · score ' + d.score.score : ''}</div>
+        <a class="btn ghost" style="display:flex;align-items:center;justify-content:center;text-decoration:none" href="${esc(d.coin_url)}" target="_blank" rel="noopener">Open on FOMO</a>`);
+      const discs = $$('#discs .disc'); let i = 0;
+      const step = () => { if (i > 0) discs[i - 1].classList.remove('beam'); if (i >= discs.length) return; const el = discs[i]; el.classList.add('beam'); el.classList.remove('na');
+        const p = el.dataset.pass; el.classList.add(p === '1' ? 'ok' : p === '0' ? 'bad' : 'na'); el.querySelector('b').textContent = p === '1' ? '✓' : p === '0' ? '✕' : '·'; i++; setTimeout(step, 220); };
+      setTimeout(step, 200);
+    } catch (e) { overlay(`<div class="err">${esc(e.message)}</div>`); }
   }
 
-  // ---------- Wallet deposit on the panel + PAPER/LIVE toggle (the pill itself). ----------
-  const APP_FN = 'https://eaggelbvxpglfxsmcldr.supabase.co/functions/v1/desk-budget';
-  const PUBLIC_WALLET = '8Sdwu3thcsB2AD2D5KXL3y4Yxm8npZ43H9hm52gNC9ht';
-  function runOf(s) { return (s && s.run) || {}; }
-  function walletUsd(w) {
-    // Deposited SOL only: 0 SOL is $0.00. Never show DRY/paper equity as the wallet USD.
-    if (!w) return null;
-    const sol = (w.sol == null || isNaN(Number(w.sol))) ? null : Number(w.sol);
-    if (sol === 0) return 0;
-    const px = (w.solPrice == null || isNaN(Number(w.solPrice))) ? null : Number(w.solPrice);
-    if (sol != null && px != null && px > 0) return sol * px;
-    return (w.usd == null || isNaN(Number(w.usd))) ? null : Number(w.usd);
-  }
-  function walletLine(w) {
-    if (!w || w.sol == null || isNaN(w.sol)) return 'Carteira do bot: —';
-    const sol = Number(w.sol).toLocaleString('en-US', {maximumFractionDigits: 4, minimumFractionDigits: 0});
-    const when = w.ts ? ' · atualizado ' + hm(w.ts) : '';
-    return 'Carteira do bot: ' + sol + ' SOL ≈ ' + usd(walletUsd(w)) + when;
-  }
-  function pilotSizeLine(w) {
-    if (!w) return '';
-    if (w.pilotSizeNote) return w.pilotSizeNote;
-    if (w.livePilotSizeUsd == null && w.dryPilotSizeUsd == null) return '';
-    const live = w.livePilotSizeUsd == null ? '—' : usd(w.livePilotSizeUsd);
-    const dry = w.dryPilotSizeUsd == null ? '—' : usd(w.dryPilotSizeUsd);
-    const desk = w.deskTicketUsd == null ? '' : ' · ticket da mesa ' + usd(w.deskTicketUsd);
-    return 'Tamanho real do piloto: LIVE ' + live + ' · DRY ' + dry + desk;
-  }
-  function walletBal(w) {
-    if (!w || (w.usd == null && w.sol == null)) return '$0.00 · — SOL';
-    const sol = w.sol == null ? '—' : Number(w.sol).toLocaleString('en-US', {maximumFractionDigits: 4, minimumFractionDigits: 0});
-    return usd(walletUsd(w)) + ' · ' + sol + ' SOL';
-  }
-  function renderRun(s) {
-    const r = runOf(s), mode = (s.mode === 'LIVE' ? 'LIVE' : s.mode === 'DEMO' ? 'DEMO' : 'PAPER');
-    if ($('run-budget')) $('run-budget').textContent = walletBal(r.wallet);
-    if ($('run-wallet')) $('run-wallet').textContent = walletLine(r.wallet);
-    if ($('run-pilot-size')) {
-      const line = pilotSizeLine(r.wallet);
-      $('run-pilot-size').textContent = line;
-      $('run-pilot-size').hidden = !line;
-    }
-    const addr = (r.wallet && r.wallet.address) || PUBLIC_WALLET;
-    if ($('run-addr')) $('run-addr').textContent = addr;
-    const hint = $('mode-hint');
-    if (hint) {
-      let msg = '';
-      if (mode === 'DEMO') msg = '';
-      else if (mode === 'LIVE') msg = 'LIVE · toca no botão para voltar a PAPER e parar o piloto.';
-      else if (r.disableReason) msg = r.disableReason;
-      hint.textContent = msg;
-      hint.hidden = !msg;
-    }
-  }
-  let modePending = null;
-  function onModeTap() {
-    const s = cache.state || {}, r = runOf(s);
-    const mode = s.mode === 'LIVE' ? 'LIVE' : s.mode === 'DEMO' ? 'DEMO' : 'PAPER';
-    if (mode === 'DEMO') return;
-    if (mode === 'PAPER' && r.canToggle === false) {
-      toast(r.disableReason || 'Não dá para passar a LIVE agora.');
-      return;
-    }
-    modePending = mode === 'LIVE' ? 'paper' : 'live';
-    if (modePending === 'live') {
-      $('mode-sheet-t').textContent = 'Negociar com dinheiro real';
-      $('mode-sheet-msg').textContent = 'Vais negociar com dinheiro real. Confirmar?';
-      $('mode-confirm').textContent = 'Confirmar';
-    } else {
-      $('mode-sheet-t').textContent = 'Voltar a PAPER';
-      $('mode-sheet-msg').textContent = 'Parar e voltar a PAPER? O piloto deixa de negociar.';
-      $('mode-confirm').textContent = 'Parar';
-    }
-    if ($('mode-sheet-err')) { $('mode-sheet-err').hidden = true; $('mode-sheet-err').textContent = ''; }
-    $('mode-sheet').hidden = false;
-  }
-  function closeMode() { if ($('mode-sheet')) $('mode-sheet').hidden = true; modePending = null; }
-  function modeErr(msg) { const e = $('mode-sheet-err'); if (!e) return; e.textContent = msg; e.hidden = !msg; }
-  async function confirmMode() {
-    const action = modePending;
-    if (action !== 'live' && action !== 'paper') return;
-    modeErr('');
-    const body = {action: action, id: 'm' + Date.now().toString(36)};
-    const tok = localStorage.getItem('desk_t'), path = localStorage.getItem('desk_d');
-    const headers = {'content-type': 'application/json'};
-    if (tok) headers['authorization'] = 'Bearer ' + tok;
-    if (path) headers['x-desk-path'] = path;
-    let sent = false;
-    if (path || tok) {
-      try {
-        const r = await fetch(APP_FN, {method: 'POST', headers, body: JSON.stringify(body), referrerPolicy: 'no-referrer'});
-        if (r.status === 200) sent = true;
-        else if (r.status === 401) sent = false;
-        else { const j = await r.json().catch(() => ({})); if (j && j.error) { modeErr(String(j.error)); return; } }
-      } catch (e) { /* fall through */ }
-    }
-    if (sent) {
-      toast(action === 'live' ? 'A passar a LIVE…' : 'A voltar a PAPER…');
-      closeMode();
-      const want = action === 'live' ? 'LIVE' : 'PAPER';
-      const t0 = Date.now();
-      const wait = setInterval(async () => {
-        try { const s = await get('state'); renderState(s); if (s.mode === want) clearInterval(wait); } catch (e) {}
-        if (Date.now() - t0 > 25000) clearInterval(wait);
-      }, 3000);
-      return;
-    }
-    const cmd = action === 'live' ? 'LIVE' : 'paper';
-    modeErr('Não consegui enviar o pedido. Se o piloto e a carteira estiverem prontos, envia no Telegram ao bot da mesa:  ' + cmd);
-  }
+  // ---------- tabs ----------
+  function go(t) { $$('.tab').forEach(x => x.classList.remove('active')); $('#tab-' + t).classList.add('active'); $$('.tabbar button').forEach(b => b.classList.toggle('on', b.dataset.go === t));
+    if (t === 'activity') loadActivity(); if (t === 'account') loadAccount(); if (t === 'bots') loadBots(); window.scrollTo(0, 0); }
+  function bindGo() { $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go)); }
+  window.__desk = { go, openCoin, openAudit, openScreen };
 
-
-  // Replay da noite: plays the last published REAL series (night-replay.json) through the same components.
-  let replayOn = false, replayT = 0;
-  function replayBtnState() {
-    const b = $('btn-replay'), data = cache.replay, bn = $('replay-banner');
-    const can = !!(data && data.hasReplay);
-    if (b) {
-      b.disabled = !can;
-      b.setAttribute('aria-disabled', can ? 'false' : 'true');
-      b.classList.toggle('on', replayOn);
-      b.textContent = replayOn ? 'Replay · acelerado' : 'Replay da noite';
-    }
-    if (bn) { bn.hidden = !replayOn; bn.textContent = 'Replay · acelerado'; }
+  // ---------- loops ----------
+  async function tick() {
+    let wait = PLANB ? 15000 : 2000;
+    try { const first = !lastState; renderState(await api('/state')); if (first) loadBots(); } catch (e) { if (e.message === '401') return; wait = renderError() * 1000; }
+    setTimeout(tick, wait);
   }
-  async function pollReplay() {
-    try {
-      const r = await fetch('night-replay.json?t=' + Date.now(), {cache: 'no-store', referrerPolicy: 'no-referrer'});
-      if (r.ok) cache.replay = await r.json();
-    } catch (e) { /* keep last */ }
-    if (!replayOn) replayBtnState();
-    setTimeout(pollReplay, STATE_S * 1000);
+  if (boot()) {
+    botIcons(null); bindGo(); tick(); loadChart(); loadTerminal(); loadTradeDetails(); loadBots(); api('/settings').then(s => window.__set = s.settings).catch(() => { });
+    setInterval(loadChart, PLANB ? 15000 : 5000); setInterval(loadTerminal, PLANB ? 15000 : 2000); setInterval(loadTradeDetails, PLANB ? 15000 : 5000);
+    setInterval(loadBots, 15000); setInterval(loadScreen, PLANB ? 15000 : 1000);
+    if ('serviceWorker' in navigator && !FIX) navigator.serviceWorker.register('sw.js').catch(() => { });
   }
-  function stopReplay(restore) {
-    cancelAnimationFrame(replayT); replayT = 0; replayOn = false;
-    replayBtnState();
-    if (restore) {
-      feedShown = null; feedQ = []; if (feedT) { clearTimeout(feedT); feedT = 0; }
-      if (D && cache.state) {
-        renderState(cache.state);
-        if (cache['chart/' + range]) drawChart(cache['chart/' + range], true);
-        else loadChart();
-      }
-    }
-  }
-  function startReplay() {
-    const data = cache.replay;
-    if (!data || !data.hasReplay || replayOn) return;
-    const points = data.points || [];
-    const events = (data.events || []).slice().sort((a, b) => a.ts - b.ts);
-    if (!events.length && points.length < 2 && !(points.length && data.startBalance != data.endBalance)) return;
-    replayOn = true; replayBtnState();
-    feedShown = new Set(); feedQ = []; if (feedT) { clearTimeout(feedT); feedT = 0; }
-    if ($('home-activity')) $('home-activity').innerHTML = '';
-    const t0 = Number(data.t0);
-    const lastE = events.length ? events[events.length - 1].ts : t0;
-    const lastP = points.length ? points[points.length - 1][0] : t0;
-    const t1 = Math.max(Number(data.t1 || t0), lastE, lastP, t0 + 1);
-    const dur = Math.max(8, Math.min(30, Number(data.windowS || 25))) * 1000;
-    const startBal = data.startBalance != null ? Number(data.startBalance) : (points[0] ? points[0][1] : 0);
-    tweenBalance(startBal);
-    pnlRow(startBal, startBal, 0, 1);
-    const bots = {};
-    ORDER.forEach(a => { bots[a] = {waiting: true, running: false, paused: false, hot: false, text: 'À espera'}; });
-    if ($('ag-rows')) $('ag-rows').innerHTML = ORDER.map(a => botRowHtml(a, bots[a])).join('');
-    const botClear = {};
-    function paintBots(nowMs) {
-      const box = $('ag-rows'); if (!box) return;
-      for (const a of ORDER) {
-        if (botClear[a] && nowMs > botClear[a]) { bots[a].hot = false; bots[a].text = 'À espera'; bots[a].waiting = true; bots[a].running = false; }
-        const b = bots[a], row = box.querySelector('[data-a="' + a + '"]'); if (!row) continue;
-        const st = botVerb(a, b, !!b.hot);
-        row.classList.toggle('hot', !!b.hot); row.classList.toggle('on', st.dot === 'on' || st.dot === 'wait'); row.classList.toggle('off', st.dot === 'stop');
-        const hb = row.querySelector('.hb'); if (hb) hb.className = 'hb ' + st.dot;
-        const tx = (b.hot && b.coin) ? (b.coin + ' · ' + st.text) : st.text;
-        const el = row.querySelector('.bot-ln');
-        if (el && el.dataset.k !== tx) { el.dataset.k = tx; el.textContent = tx; }
-      }
-    }
-    function balAt(t) {
-      if (!points.length) return startBal;
-      let last = points[0][1];
-      for (let i = 0; i < points.length; i++) { if (points[i][0] <= t) last = points[i][1]; else break; }
-      return last;
-    }
-    function chartAt(t) {
-      const pts = points.filter(p => p[0] <= t);
-      const series = pts.length ? pts.slice() : (points[0] ? [[t0, points[0][1]]] : []);
-      if (series.length === 1 && t > series[0][0]) series.push([t, series[0][1]]);
-      window.DeskChart.line($('chart'), {points: series, startValue: startBal, xMin: t0, xMax: t1}, {reveal: false, head: $('chart-head')});
-      const empty = $('chart-empty');
-      if (empty) { empty.textContent = series.length < 2 ? 'À espera do primeiro trade' : ''; empty.hidden = series.length > 1; }
-    }
-    let ei = 0, lastBal = startBal;
-    const tStart = performance.now();
-    function frame(now) {
-      if (!replayOn) return;
-      const p = RM() ? 1 : Math.min(1, (now - tStart) / dur);
-      const t = t0 + p * (t1 - t0);
-      const bal = balAt(t);
-      if (bal !== lastBal) {
-        tweenBalance(bal);
-        const pct = startBal ? ((bal / startBal - 1) * 100) : 0;
-        pnlRow(bal, startBal, pct, startBal ? (bal / startBal) : 1);
-        lastBal = bal;
-      }
-      chartAt(t);
-      while (ei < events.length && events[ei].ts <= t) {
-        const e = events[ei++];
-        if (!feedShown) feedShown = new Set();
-        if (!feedShown.has(e.id)) { feedShown.add(e.id); feedQ.push(e); if (!feedT) pumpFeed(); }
-        const a = e.actor;
-        if (bots[a]) {
-          bots[a].hot = true; bots[a].waiting = false;
-          bots[a].text = e.text || WORK[a] || 'À espera';
-          bots[a].coin = e.coin; bots[a].mint = e.mint;
-          botClear[a] = now + 1600;
-        }
-      }
-      paintBots(now);
-      if (p < 1) replayT = requestAnimationFrame(frame);
-      else stopReplay(true);
-    }
-    paintBots(performance.now());
-    chartAt(t0);
-    replayT = requestAnimationFrame(frame);
-  }
-  if ($('btn-replay')) $('btn-replay').onclick = () => { if (!cache.replay || !cache.replay.hasReplay) return; if (replayOn) stopReplay(true); else startReplay(); };
-
-  // Live screen (t374u / t390u): public frame + caption from the live-screen branch.
-  // raw.githubusercontent.com caches the branch tip for ~5 min (and caches 404s), so
-  // the app loads caption + frame by commit sha. SHA URLs are fresh immediately after push.
-  // The sha comes from api.github.com refs (CORS, typically fresh). We poll it at most
-  // every 75 s to stay under the unauth 60 req/h/IP cap (48 req/h with margin; one phone).
-  const LIVE_MAX_AGE_S = 3 * 60;
-  const LIVE_POLL_S = 15;
-  const LIVE_SHA_POLL_S = 75;
-  const LIVE_REPO = 'kaykefranco01-hash/desk-app';
-  const LIVE_BRANCH = 'live-screen';
-  const LIVE_RAW = 'https://raw.githubusercontent.com/' + LIVE_REPO + '/';
-  const LIVE_SHA_URL = 'https://api.github.com/repos/kaykefranco01-hash/desk-app/git/refs/heads/live-screen';
-  const LIVE_AC = {scanner: '#0a84ff', auditor: '#bf5af2', analyst: '#30d158', executor: '#ff9f0a', risk: '#ff453a', brain: '#5e5ce6', discover: '#64d2ff'};
-  let liveSha = '';
-  let liveShaAt = 0;
-  async function resolveLiveSha() {
-    const now = Date.now();
-    if (liveSha && now - liveShaAt < LIVE_SHA_POLL_S * 1000) return liveSha;
-    try {
-      const r = await fetch(LIVE_SHA_URL, {cache: 'no-store', referrerPolicy: 'no-referrer', headers: {Accept: 'application/vnd.github+json'}});
-      if (r.status === 403 || r.status === 429) return liveSha;
-      const d = r.ok ? await r.json() : null;
-      const sha = d && d.object ? String(d.object.sha || '') : '';
-      if (/^[0-9a-f]{40}$/.test(sha)) { liveSha = sha; liveShaAt = now; return sha; }
-    } catch (e) { /* keep last sha */ }
-    return liveSha;
-  }
-  async function fetchCaption(url) {
-    const r = await fetch(url, {cache: 'no-store', referrerPolicy: 'no-referrer'});
-    if (!r.ok) return null;
-    const j = await r.json();
-    const age = j && j.epoch != null ? (Date.now() / 1000 - Number(j.epoch)) : Infinity;
-    if (j && isFinite(age) && age <= LIVE_MAX_AGE_S) return {j, age};
-    return null;
-  }
-  async function resolveLiveCaption() {
-    const sha = await resolveLiveSha();
-    if (sha) {
-      try {
-        const got = await fetchCaption(LIVE_RAW + sha + '/live/caption.json');
-        if (got) return {src: LIVE_RAW + sha + '/live/frame.jpg', ...got};
-      } catch (e) { /* fallback */ }
-    }
-    try {
-      const got = await fetchCaption(LIVE_RAW + LIVE_BRANCH + '/live/caption.json');
-      if (got) return {src: LIVE_RAW + LIVE_BRANCH + '/live/frame.jpg', bucket: 0, ...got};
-    } catch (e) { /* placeholder */ }
-    return null;
-  }
-  function agoPt(s) {
-    if (s < 45) return 'agora';
-    if (s < 3600) return 'há ' + Math.max(1, Math.round(s / 60)) + ' min';
-    return 'há ' + Math.round(s / 3600) + ' h';
-  }
-  function liveHex(c, actor) {
-    if (/^#[0-9a-fA-F]{6}$/.test(c || '')) return c;
-    return LIVE_AC[actor] || '#30d158';
-  }
-  let liveBlobUrl = '';
-  function showLivePlaceholder() {
-    const img = $('live-frame'), ph = $('live-ph'), cap = $('live-cap'), badge = $('live-badge');
-    if (img) { img.removeAttribute('src'); img.hidden = true; }
-    if (ph) ph.hidden = false;
-    if (cap) cap.textContent = '';
-    if (badge) { badge.hidden = true; badge.textContent = ''; badge.style.removeProperty('--ac'); }
-    if (liveBlobUrl) { URL.revokeObjectURL(liveBlobUrl); liveBlobUrl = ''; }
-  }
-  async function showLiveFrame(img, ph, src) {
-    // Direct <img src=raw.githubusercontent> onerrors in Chrome (even with image/jpeg + CORS).
-    // fetch() + blob: URL loads the same bytes reliably.
-    const r = await fetch(src, {cache: 'no-store', referrerPolicy: 'no-referrer'});
-    if (!r.ok) throw new Error('frame');
-    const blob = await r.blob();
-    if (blob.size < 1000) throw new Error('frame');
-    const url = URL.createObjectURL(blob);
-    await new Promise((resolve, reject) => {
-      img.onload = () => resolve();
-      img.onerror = () => reject(new Error('frame'));
-      if (liveBlobUrl) URL.revokeObjectURL(liveBlobUrl);
-      liveBlobUrl = url;
-      img.src = url;
-    });
-    img.hidden = false;
-    ph.hidden = true;
-  }
-  async function pollLiveScreen() {
-    const img = $('live-frame'), ph = $('live-ph'), cap = $('live-cap'), badge = $('live-badge');
-    if (!img || !ph) { setTimeout(pollLiveScreen, LIVE_POLL_S * 1000); return; }
-    let shown = false;
-    try {
-      const got = await resolveLiveCaption();
-      if (got) {
-        const j = got.j, age = got.age, src = got.src;
-        await showLiveFrame(img, ph, src);
-        const label = j.actor_label || '';
-        if (cap) {
-          const bits = [];
-          if (label && j.trade && j.trade !== label) bits.push(j.trade);
-          else if (!label && (j.caption || '')) bits.push(j.caption);
-          bits.push(agoPt(age));
-          cap.textContent = bits.filter(Boolean).join(' · ');
-        }
-        if (badge) {
-          if (label || j.badge) {
-            badge.hidden = false;
-            badge.style.setProperty('--ac', liveHex(j.actor_color, j.actor));
-            badge.replaceChildren();
-            const dot = document.createElement('i');
-            dot.className = 'live-actor-dot';
-            badge.appendChild(dot);
-            badge.appendChild(document.createTextNode(label || j.badge));
-          } else { badge.hidden = true; badge.textContent = ''; }
-        }
-        shown = true;
-      }
-    } catch (e) { /* placeholder */ }
-    if (!shown && !(img && !img.hidden && img.naturalWidth > 0)) showLivePlaceholder();
-    setTimeout(pollLiveScreen, LIVE_POLL_S * 1000);
-  }
-  // ---------- start ----------
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
-  renderRanges();
-  pollOvernight();
-  pollReplay();
-  pollLiveScreen();
-  pollTokenImages();
-  if (!D) {
-    // Public page works without the desk link (nights, live screen, Replay). The paste box is enough; no offline error.
-    // iOS keeps home-screen storage apart from Safari: the owner pastes the desk link once.
-    const box = document.createElement('div'); box.className = 'group'; box.id = 'paste-box';
-    box.innerHTML = '<div class="row"><input id="paste" placeholder="Paste your desk link" autocomplete="off" autocapitalize="off" spellcheck="false" style="flex:1;min-height:44px;background:none;border:0;color:#fff;font:inherit"></div>';
-    $('tab-home').querySelector('.err-slot').after(box);
-    $('paste').addEventListener('change', e => { const v = e.target.value, mm = v.match(/#(?:.*&)?d=([A-Za-z0-9]{32,64})/);
-      const tm = v.match(/[#&?]t=([A-Za-z0-9_\-]{20,200})/);
-      if (tm) localStorage.setItem('desk_t', tm[1]);
-      if (mm) { localStorage.setItem('desk_d', mm[1]); location.reload(); } else toast('That is not a desk link'); });
-    $('balance').textContent = '—'; $('balance').classList.remove('skel');
-    $('today').textContent = ''; $('mult').hidden = true; if ($('agents-running')) { $('agents-running').textContent = '—'; $('agents-running').classList.remove('skel-i'); }
-    if ($('nights-box')) renderNights({});
-    if ($('home-activity')) $('home-activity').innerHTML = '<div class="empty-row">Abre o link da mesa para o ao vivo, ou carrega em Replay da noite.</div>';
-    if ($('ag-rows')) $('ag-rows').innerHTML = '';
-    return;
-  }
-  loadingLayout();
-  pollState().then(() => { refreshScreen(); tryGet('index').catch(() => {}); pollEvents(); pollDemo(); pollTokenImages().then(() => refreshScreen()); });
 })();

@@ -27,7 +27,7 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .pill.orange{background:rgba(255,159,10,.18);color:var(--orange)}.pill.green{background:rgba(0,211,90,.16);color:var(--green)}
 .pill.red{background:rgba(255,69,58,.16);color:var(--red)}.pill.grey{background:var(--card2);color:var(--sec)}
 .substats{display:flex;gap:10px;align-items:center;margin-top:8px;flex-wrap:wrap}
-.card{background:var(--card);border-radius:16px;padding:14px;margin-top:14px;position:relative}
+.card{background:var(--card);border-radius:24px;padding:14px;margin-top:14px;position:relative}
 .chart-card{padding:10px 6px 6px}.chart-card canvas{width:100%;display:block}
 .ranges{display:flex;justify-content:space-between;padding:4px 6px 0}.ranges button{font:600 13px var(--txt);color:var(--sec);padding:0 10px;border-radius:14px;min-height:32px}
 .ranges button.on{background:var(--card2);color:var(--text)}
@@ -133,30 +133,28 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .coin-line,.coin-head{display:flex;align-items:center;gap:8px}
 .coin-head .cav{width:36px;height:36px}
 
-/* ---------- agents row, log, PiP, toasts (t490u: move like savipww's video; real rows only) ---------- */
-.agents{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;margin-top:14px;padding:12px 4px 8px;background:var(--card);border-radius:18px}
-.agent{display:flex;flex-direction:column;align-items:center;min-width:0;transition:filter .3s,opacity .3s}
-.agent .face{position:relative;width:min(58px,15vw);aspect-ratio:1;border-radius:50%}
-.agent .face-svg{width:100%;height:100%;display:block;overflow:visible;animation:breathe 3.2s ease-in-out infinite}
-.agent:nth-child(2) .face-svg{animation-delay:-.6s}.agent:nth-child(3) .face-svg{animation-delay:-1.2s}.agent:nth-child(4) .face-svg{animation-delay:-1.8s}.agent:nth-child(5) .face-svg{animation-delay:-2.4s}
-.agent .ring{position:absolute;inset:-4px;border-radius:50%;border:2px solid var(--c);opacity:0}
-.agent .alabel{margin-top:6px;font:800 9px/1.1 var(--txt);letter-spacing:.4px;color:var(--c);text-align:center;overflow-wrap:anywhere;opacity:.75}
-.agent .mark{position:absolute;right:-3px;bottom:-2px;width:18px;height:18px;border-radius:50%;font:800 11px/18px var(--txt);text-align:center;color:#fff;border:2px solid var(--card)}
-.agent .mark.yes{background:var(--green)}.agent .mark.no{background:var(--red)}
-.agent.on .face{box-shadow:0 0 18px 2px var(--c)}
-.agent.on .ring{opacity:1;animation:ringp 1.1s ease-out 2}
-.agent.on .face-svg{animation:bounce .55s cubic-bezier(.3,1.6,.5,1) 2}
-.agent.on .pupils{animation:look 1.1s ease-in-out 2}
-.agent.on .mouth{animation:talk .22s ease-in-out 8}
-.agent.on .alabel{opacity:1}
-.agent.off{filter:grayscale(1);opacity:.45}.agent.off .face-svg{animation:none}
-.agent .mouth,.agent .pupils{transform-box:fill-box;transform-origin:center}
-@keyframes breathe{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-1.5px) scale(1.02)}}
-@keyframes bounce{0%{transform:translateY(0) scale(1)}35%{transform:translateY(-9px) scale(1.08,.94)}65%{transform:translateY(0) scale(.96,1.05)}100%{transform:translateY(0) scale(1)}}
-@keyframes ringp{0%{transform:scale(.92);opacity:1}100%{transform:scale(1.28);opacity:0}}
-@keyframes look{0%,100%{transform:translateX(0)}30%{transform:translateX(2px)}70%{transform:translateX(-2px)}}
-@keyframes talk{0%,100%{transform:scaleY(1)}50%{transform:scaleY(.4)}}
-.log-card{padding:10px 12px}
+/* ---------- Agents v2 (t496u): fomo-style dark card + flat blobs. Look only. ---------- */
+:root{--card:#1c1c1e;--card2:#2c2c2e}
+body{background:#000}
+.agents-card{margin-top:16px;background:#1c1c1e;border-radius:28px;padding:20px 0 18px}
+.agents-head{display:flex;align-items:baseline;justify-content:space-between;margin:0 20px 14px}.agents-run{font:600 14px var(--txt);color:#30d158}
+.agents-title{margin:0;font:700 24px/1.1 var(--disp);letter-spacing:-.4px;color:#fff}
+.agents{display:flex;gap:16px;overflow-x:auto;overflow-y:hidden;padding:6px 20px 4px;scroll-snap-type:x proximity;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.agents::-webkit-scrollbar{display:none}
+.agent{flex:0 0 70px;display:flex;flex-direction:column;align-items:center;scroll-snap-align:start;transition:filter .3s,opacity .3s}
+.agent .face{position:relative;width:66px;height:66px}
+.agent .blob-svg{width:100%;height:100%;display:block;overflow:visible}
+.agent .track{transition:opacity .25s}
+.agent .seg{opacity:0;transform-origin:center;transform-box:fill-box}
+.agent.on .track{opacity:.35}
+.agent.on .seg{opacity:1;animation:segspin 1.05s linear infinite}
+.agent .alabel{margin-top:10px;font:700 10.5px/1.15 var(--txt);letter-spacing:.6px;color:var(--lc);text-align:center;text-transform:uppercase;white-space:normal;max-width:70px}
+.agent .mark{position:absolute;right:-6px;bottom:-4px;width:28px;height:28px;box-sizing:border-box;border-radius:50%;border:3px solid #1c1c1e;font:800 13px/22px var(--txt);text-align:center;color:#fff}
+.agent .mark.yes{background:#30d158}.agent .mark.no{background:#ff453a}
+.agent.on .mark{display:none}
+.agent.off{filter:grayscale(1);opacity:.45}
+@keyframes segspin{to{transform:rotate(360deg)}}
+.log-card{padding:14px 16px;border-radius:24px;background:#1c1c1e}
 .log-card .term-head{align-items:center;gap:8px}
 .log-title{font:700 15px var(--disp);color:var(--text)}
 .log-card #term-coin{margin-left:auto;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
@@ -166,15 +164,15 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .log-card .terminal .x{min-width:0;overflow-wrap:anywhere}
 .log-card .terminal .ln.new{animation:lnin .35s ease-out}
 @keyframes lnin{0%{opacity:0;transform:translateY(8px);background:rgba(255,255,255,.08)}100%{opacity:1;transform:none;background:transparent}}
-.pip{margin-left:auto;width:92%;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.08)}
-.pip-bar{padding:8px 12px;background:#141416;gap:6px;font-size:12px}
+.pip{margin-left:auto;width:92%;border-radius:24px;overflow:hidden;background:#1c1c1e;box-shadow:0 10px 30px rgba(0,0,0,.7),0 0 0 1px rgba(255,255,255,.06)}
+.pip-bar{padding:10px 14px;background:#1c1c1e;gap:6px;font-size:12px}
 .pip-bar .lights{display:inline-flex;gap:5px;margin-right:4px}.pip-bar .lights i{width:9px;height:9px;border-radius:50%;background:#ff5f57}
 .pip-bar .lights i:nth-child(2){background:#febc2e}.pip-bar .lights i:nth-child(3){background:#28c840}
 .pip-bar .lane{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:48%}
 .pip .last-order{padding:8px 12px 10px;font-size:12px}
 .toasts{position:fixed;left:12px;right:12px;top:calc(env(safe-area-inset-top) + 10px);z-index:40;display:flex;flex-direction:column;gap:8px;pointer-events:none;max-width:560px;margin:0 auto}
-.toast{display:flex;align-items:center;gap:8px;background:rgba(40,40,44,.94);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-radius:14px;padding:10px 12px;font-size:14px;box-shadow:0 8px 24px rgba(0,0,0,.5);animation:tin .35s ease-out;transition:opacity .5s,transform .5s;border-left:4px solid var(--blue)}
+.toast{display:flex;align-items:center;gap:8px;background:rgba(28,28,30,.96);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-radius:20px;padding:12px 14px;font-size:14px;box-shadow:0 8px 24px rgba(0,0,0,.5);animation:tin .35s ease-out;transition:opacity .5s,transform .5s;border-left:4px solid var(--blue)}
 .toast.win{border-left-color:var(--green)}.toast.loss{border-left-color:var(--red)}.toast.buy{border-left-color:var(--purple)}
 .toast.out{opacity:0;transform:translateY(-10px)}
 @keyframes tin{0%{opacity:0;transform:translateY(-14px)}100%{opacity:1;transform:none}}
-@media (prefers-reduced-motion:reduce){.agent.on .face{box-shadow:0 0 0 3px var(--c)}.agent.on .ring{opacity:1}.log-card .terminal{scroll-behavior:auto}}
+@media (prefers-reduced-motion:reduce){.agent.on .seg{animation:none}.agent .track{transition:none}.log-card .terminal{scroll-behavior:auto}.log-card .terminal .ln.new{animation:none}}

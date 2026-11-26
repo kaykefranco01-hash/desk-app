@@ -9,7 +9,7 @@
 <title>Grok Bot</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<link rel="stylesheet" href="app.css?v=20261126f">
+<link rel="stylesheet" href="app.css?v=20261126g">
 </head>
 <body>
 <div id="banner" hidden></div>
@@ -33,7 +33,7 @@
       <span id="wl" class="secondary"></span>
     </div>
     <div class="substats"><span id="market" class="pill grey small"></span><span id="fomo-state" class="secondary small"></span></div>
-    <div class="agents" id="agents" aria-label="Agents"></div>
+    <section class="agents-card" aria-label="Agents"><div class="agents-head"><h2 class="agents-title">Agents</h2><span class="agents-run" id="agents-run"></span></div><div class="agents" id="agents"></div></section>
     <div class="card term-card log-card">
       <div class="term-head"><span class="log-title">Log</span><span id="term-coin" class="mono">—</span><span id="vote-chip" class="pill grey small" hidden></span></div>
       <div id="terminal" class="terminal mono" aria-live="off"><div class="tertiary">Nothing yet tonight</div></div>
@@ -115,7 +115,7 @@
   <div class="card"><h2>Paste your desk link</h2><p class="secondary">Open the link from Telegram or the QR code once. It stays on this phone.</p>
   <input id="paste-input" placeholder="https://…#t=…" autocomplete="off"><button class="btn" id="paste-go">Open</button></div>
 </div>
-<script src="chart.js?v=20261126f"></script>
-<script src="app.js?v=20261126f"></script>
+<script src="chart.js?v=20261126g"></script>
+<script src="app.js?v=20261126g"></script>
 </body>
 </html>

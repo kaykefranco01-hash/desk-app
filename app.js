@@ -304,41 +304,60 @@
 
   // ---------- agents row + log (savipww-style, t490u). Driven only by real desk2 decision rows. ----------
   const REDUCE = matchMedia('(prefers-reduced-motion: reduce)');
+  // v2 (t496u): fomo-style flat blobs. Look only; the data path (flash/votes/heartbeats) is unchanged.
   const AGENTS = [
-    { k: 'scanner', label: 'SCANNER', color: '#64d2ff', bots: ['scanner'], hb: 'scanner', acc: '<line x1="32" y1="9" x2="32" y2="2" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><circle cx="32" cy="2.6" r="2.6" fill="#fff"/>' },
-    { k: 'auditor', label: 'AUDITOR', color: '#ffd60a', bots: ['analyst'], hb: 'analyst', acc: '<circle cx="41" cy="28" r="9" fill="none" stroke="#222" stroke-width="2.2"/><line x1="47" y1="35" x2="53" y2="45" stroke="#222" stroke-width="2.4" stroke-linecap="round"/>' },
-    { k: 'chart', label: 'CHART READER', color: '#ff9f0a', bots: ['chart'], hb: 'brain', acc: '<polyline points="18,14 25,9 31,12 38,5 46,8" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>' },
-    { k: 'risk', label: 'RISK', color: '#ff6b9a', bots: ['risk'], hb: 'risk', acc: '<path d="M16 17q16-14 32 0" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/>' },
-    { k: 'brain', label: 'BRAIN', color: '#bf5af2', bots: ['brain', 'executor'], hb: 'brain', acc: '<path d="M20 13q3-7 8-3q4-6 8 0q5-4 8 3" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/>' }
+    { k: 'scanner', label: 'SCANNER', lc: '#5A94FF', blob: '#32ADE6', ring: '#5A94FF', seg: '#FFD60A', shape: 'star', bots: ['scanner'], hb: 'scanner' },
+    { k: 'chart', label: 'CHART READER', lc: '#FF9F0A', blob: '#FF9F0A', ring: '#FF9F0A', seg: '#FFE066', shape: 'tri', bots: ['chart'], hb: 'brain' },
+    { k: 'auditor', label: 'AUDITOR', lc: '#FF375F', blob: '#FF375F', ring: '#FF375F', seg: '#FF9EB5', shape: 'heart', bots: ['analyst'], hb: 'analyst' },
+    { k: 'risk', label: 'RISK MANAGER', lc: '#8E8E93', blob: '#8E8E93', ring: '#BF5AF2', seg: '#E3B8FF', shape: 'hex', bots: ['risk'], hb: 'risk' },
+    { k: 'brain', label: 'BRAIN', lc: '#30D158', blob: '#BF5AF2', ring: '#30D158', seg: '#A6F2BC', shape: 'cloud', bots: ['brain', 'executor'], hb: 'brain' }
   ];
   const AGENT_OF = {}; AGENTS.forEach(a => a.bots.forEach(b => AGENT_OF[b] = a));
   const LOG_NAME = { scanner: 'SCANNER', analyst: 'AUDITOR', chart: 'CHART READER', risk: 'RISK', brain: 'BRAIN', executor: 'EXECUTOR' };
-  const LOG_COLOR = { scanner: '#64d2ff', analyst: '#ffd60a', chart: '#ff9f0a', risk: '#ff6b9a', brain: '#bf5af2', executor: '#00d35a' };
+  const LOG_COLOR = { scanner: '#5A94FF', analyst: '#FF375F', chart: '#FF9F0A', risk: '#BF5AF2', brain: '#30D158', executor: '#64d2ff' };
   const EMO = { kill: '❌', pass: '✅', reject: '⛔', skip: '✋', bought: '🟢', sold: '💰', stopped: '🛑', size: '💵', click: '👆', fail: '⚠️', shadow: '👻', dip: '⏬', wait: '⏳', social: '💬', mint: '🪙' };
   const faceTimers = {}; const marks = {};
-  function faceSvg(a) {
-    return `<svg viewBox="0 0 64 64" class="face-svg" aria-hidden="true"><defs><radialGradient id="g-${a.k}" cx="38%" cy="32%" r="70%"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".35" stop-color="${a.color}"/><stop offset="1" stop-color="${a.color}" stop-opacity=".78"/></radialGradient></defs>
-      <circle cx="32" cy="34" r="27" fill="url(#g-${a.k})"/>${a.acc}
-      <g class="eyes"><ellipse cx="23" cy="30" rx="6" ry="7" fill="#fff"/><ellipse cx="41" cy="30" rx="6" ry="7" fill="#fff"/>
-      <g class="pupils"><circle cx="24" cy="31" r="3.2" fill="#111"/><circle cx="42" cy="31" r="3.2" fill="#111"/></g></g>
-      <circle cx="16" cy="41" r="3" fill="#fff" opacity=".25"/><circle cx="48" cy="41" r="3" fill="#fff" opacity=".25"/>
-      <path class="mouth" d="M24 44q8 7 16 0" fill="none" stroke="#111" stroke-width="2.6" stroke-linecap="round"/></svg>`;
+  function starPath() { // squiggly 6-point star
+    let d = ''; for (let i = 0; i <= 120; i++) { const t = i / 120 * Math.PI * 2, r = 25 + 7.5 * Math.cos(6 * t) + 1.6 * Math.cos(18 * t); d += (i ? 'L' : 'M') + (44 + r * Math.cos(t - Math.PI / 2)).toFixed(1) + ' ' + (44 + r * Math.sin(t - Math.PI / 2)).toFixed(1); }
+    return d + 'Z';
+  }
+  const SHAPES = {
+    star: (c) => `<path d="${starPath()}" fill="${c}"/>`,
+    tri: (c) => `<path d="M44 20 L66 60 L22 60 Z" fill="${c}" stroke="${c}" stroke-width="11" stroke-linejoin="round"/>`,
+    heart: (c) => `<path d="M44 66 C20 50 16 38 16 31 C16 22 23 17 30 17 C37 17 42 21 44 26 C46 21 51 17 58 17 C65 17 72 22 72 31 C72 38 68 50 44 66Z" fill="${c}" stroke="${c}" stroke-width="4" stroke-linejoin="round"/>`,
+    hex: (c) => `<path d="M44 22 L63 33 L63 55 L44 66 L25 55 L25 33 Z" fill="${c}" stroke="${c}" stroke-width="10" stroke-linejoin="round"/>`,
+    cloud: (c) => `<g fill="${c}"><circle cx="31" cy="48" r="12"/><circle cx="44" cy="36" r="15"/><circle cx="58" cy="47" r="13"/><rect x="31" y="46" width="27" height="14" rx="7"/></g>`
+  };
+  const EYES = { star: [37, 42], tri: [38, 50], heart: [36, 38], hex: [36, 44], cloud: [36, 46] };
+  function blobSvg(a) {
+    const [ey, ex] = [EYES[a.shape][1], EYES[a.shape][0]];
+    return `<svg viewBox="0 0 88 88" class="blob-svg" aria-hidden="true">
+      <circle class="disc" cx="44" cy="44" r="36" fill="#2C2C2E"/>
+      <circle class="track" cx="44" cy="44" r="41" fill="none" stroke="${a.ring}" stroke-width="3"/>
+      <circle class="seg" cx="44" cy="44" r="41" fill="none" stroke="${a.seg}" stroke-width="6" stroke-linecap="round" stroke-dasharray="52 206"/>
+      <g class="blob">${SHAPES[a.shape](a.blob)}<circle cx="${ex}" cy="${ey}" r="3.1" fill="#16161a"/><circle cx="${88 - ex}" cy="${ey}" r="3.1" fill="#16161a"/></g></svg>`;
   }
   function renderAgents() {
     const box = $('#agents'); if (!box || box.children.length) return;
-    box.innerHTML = AGENTS.map(a => `<div class="agent" data-a="${a.k}" style="--c:${a.color}"><div class="face"><span class="ring"></span>${faceSvg(a)}<span class="mark" hidden></span></div><div class="alabel">${a.label}</div></div>`).join('');
+    box.innerHTML = AGENTS.map(a => `<div class="agent" data-a="${a.k}" style="--c:${a.ring};--lc:${a.lc}"><div class="face">${blobSvg(a)}<span class="mark" hidden></span></div><div class="alabel">${a.label}</div></div>`).join('');
   }
   function agentAlive() {
     const hb = (lastState && lastState.heartbeats) || {}, now = Date.now() / 1000;
-    AGENTS.forEach(a => { const el = $(`.agent[data-a="${a.k}"]`); if (el) el.classList.toggle('off', !(hb[a.hb] && now - hb[a.hb] < 120)); });
+    let n = 0; AGENTS.forEach(a => { const el = $(`.agent[data-a="${a.k}"]`); const up = !!(hb[a.hb] && now - hb[a.hb] < 120); if (up) n++; if (el) el.classList.toggle('off', !up); });
+    const r = $('#agents-run'); if (r) r.textContent = n ? `${n} running` : '';
   }
+  const WORK_MS = 2200;
   function flash(bot, row) {
     const a = AGENT_OF[bot]; if (!a) return; const el = $(`.agent[data-a="${a.k}"]`); if (!el) return;
-    el.classList.remove('on'); void el.offsetWidth; el.classList.add('on');
-    clearTimeout(faceTimers[a.k]); faceTimers[a.k] = setTimeout(() => el.classList.remove('on'), 2200);
-    if (row && row.verdict === 'vote' && /vote (yes|no)/.test(row.text)) {
-      const yes = /vote yes/.test(row.text), m = el.querySelector('.mark');
-      m.hidden = false; m.textContent = yes ? '✓' : '✗'; m.className = 'mark ' + (yes ? 'yes' : 'no');
+    const m = el.querySelector('.mark');
+    el.classList.remove('on'); void el.offsetWidth; el.classList.add('on'); // spinner while the real row plays; no badge while working
+    clearTimeout(faceTimers[a.k]); faceTimers[a.k] = setTimeout(() => el.classList.remove('on'), WORK_MS);
+    let yes = null;
+    if (row && row.verdict === 'vote' && /vote (yes|no)/.test(row.text)) yes = /vote yes/.test(row.text);
+    else if (row && row.verdict === 'pass') yes = true;
+    else if (row && row.verdict === 'reject') yes = false;
+    if (yes !== null) {
+      m.hidden = false; m.textContent = yes ? '✓' : '✕'; m.className = 'mark ' + (yes ? 'yes' : 'no'); // CSS hides it while .on
       clearTimeout(marks[a.k]); marks[a.k] = setTimeout(() => { m.hidden = true; }, 30000);
     }
   }

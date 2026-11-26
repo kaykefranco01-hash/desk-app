@@ -104,7 +104,7 @@
   function renderState(st) {
     lastState = st; lastOk = Date.now(); failN = 0; $('#err').hidden = true;
     if (PLANB && st.updated && Date.now() / 1000 - st.updated > 90) { $('#err').hidden = false; $('#err').textContent = `Desk not publishing · last update ${hm(st.updated)}`; }
-    $('#banner').hidden = !st.fixture; if (st.fixture) $('#banner').textContent = 'TEST FIXTURE · PAPER · not real trades';
+    const fake = !!(st.fixture || /TEST-(PAWS|GATO|RUG)/.test(JSON.stringify(st || {}))); $('#banner').hidden = !fake; if (fake) $('#banner').textContent = 'TEST FIXTURE · PAPER · not real trades';
     odometer($('#balance'), st.balance);
     $('#mode-pill').hidden = false; $('#mode-pill').textContent = st.mode; $('#mode-pill').className = 'pill ' + (st.mode === 'LIVE' ? 'green' : 'orange');
     const t = st.today_pct || 0; $('#today').textContent = (t >= 0 ? '+' : '') + t.toFixed(2) + '% today'; $('#today').className = t >= 0 ? 'green' : 'red';

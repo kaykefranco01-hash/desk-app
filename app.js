@@ -14,12 +14,16 @@
   // GitHub Pages host: read-only PAPER snapshots that desk2 pushes every 15 s to branch desk2-live, one folder per 15 s bucket.
   // A new path on raw.githubusercontent.com is fresh right after the push, so we read the newest finished bucket.
   const GH = /github\.io$/.test(location.hostname) ? 'https://raw.githubusercontent.com/kaykefranco01-hash/desk-app/desk2-live/b/' : null;
-  const PERIOD = 15; let curB = null;
+  const PERIOD = 5, PERIODS = [5, 15]; let curB = null;
   async function ghGet(f, isState) {
-    const now = Math.floor(Date.now() / 1000 / PERIOD);
-    const tries = isState || curB == null ? [1, 2, 3, 4, 5, 6, 7, 8].map(k => now - k) : [curB, curB - 1, curB - 2];
+    const nowSec = Date.now() / 1000;
+    const tries = [];
+    const add = b => { if (b > 0 && !tries.includes(b)) tries.push(b); };
+    if (isState || curB == null) {
+      for (const p of PERIODS) { const now = Math.floor(nowSec / p); for (const k of [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16]) add(now - k); }
+    } else { add(curB); add(curB - 1); add(curB - 2); }
     for (const b of tries) {
-      if (isState && curB != null && b < curB) break;  // never go back in time
+      if (isState && curB != null && b < curB) continue;
       let r; try { r = await fetch(GH + b + '/' + f, { cache: 'no-store', referrerPolicy: 'no-referrer' }); } catch (e) { continue; }
       if (r.ok) { if (isState) curB = b; return f.endsWith('.jpg') ? r : r.json(); }
     }
@@ -45,6 +49,7 @@
     if (p.startsWith('/activity')) return 'activity.json';
     if (p.startsWith('/terminal')) return 'terminal.json';
     if (p.startsWith('/screen.jpg')) return 'screen.jpg';
+    if (p.startsWith('/cursors')) return 'cursors.json';
     const m = p.match(/^\/(coin|audit)\/([^?]+)/); if (m) return m[1] + '/' + m[2] + '.json';
     const b = p.match(/^\/bots\/(\w+)\/decisions/); if (b) return 'bots/' + b[1] + '/decisions.json';
     return null;
@@ -117,6 +122,7 @@
     $('#screen-private').hidden = !st.private; $('#screen-empty').hidden = !!st.last_frame_at || st.private;
     const o = st.last_order;
     $('#last-order').innerHTML = o ? `${av(o.symbol, o.image, o.mint, 'sm')}<span>${o.side === 'buy' ? 'Bought' : 'Sold'} ${esc(o.symbol || o.mint.slice(0, 4))} · ${money(o.fill_usd || o.usd)} · ${o.mode === 'PAPER' ? 'PAPER' : (o.status === 'done' ? 'verified' : esc(o.status))} <span class="checks">${o.mode === 'PAPER' ? '' : [o.screen_ok, o.api_ok, o.chain_ok].map(x => x ? '✓' : '·').join('')}</span></span>` : 'No orders yet';
+    if (st.cursors) renderCursors(st.cursors, $('#cursor-layer'));
     $('#bots-head').textContent = `Bots · ${Object.keys(COLORS).filter(b => st.heartbeats && st.heartbeats[b] && Date.now() / 1000 - st.heartbeats[b] < 120).length} running`;
     const pos = st.positions || [];
     $('#open-pos-wrap').hidden = !pos.length;
@@ -151,13 +157,62 @@
       if (!b) return; const old = img.dataset.obj; img.src = URL.createObjectURL(b); img.dataset.obj = img.src; if (old) setTimeout(() => URL.revokeObjectURL(old), 2000);
     }).catch(() => { });
   }
+  const CURSOR_ORDER = ['scanner', 'analyst', 'risk', 'brain', 'executor'];
+  const CURSOR_COLORS = { scanner: '#64d2ff', analyst: '#64d2ff', risk: '#ffd60a', brain: '#bf5af2', executor: '#00d35a' };
+  function ensureCursors(layer) {
+    if (!layer || layer.dataset.ready) return layer;
+    layer.innerHTML = CURSOR_ORDER.map(b => `<div class="cur" data-bot="${b}" style="color:${CURSOR_COLORS[b]};left:8%;top:80%">
+      <svg class="ptr" width="18" height="18" viewBox="0 0 22 22"><path d="M2 2 L2 18 L7 13 L11 21 L14 19.5 L10 12 L17 12 Z" fill="${CURSOR_COLORS[b]}" stroke="#000" stroke-width="1.2"/></svg>
+      <div class="tag">@${b}</div>
+      <div class="bubble"><div class="msg">a aguardar</div><div class="when" hidden></div></div>
+    </div>`).join('');
+    layer.dataset.ready = '1';
+    return layer;
+  }
+  function fitLayer(layer, cursors, wrap) {
+    if (!layer || !wrap) return;
+    const vw = (cursors && cursors.viewport && cursors.viewport.w) || 1600;
+    const vh = (cursors && cursors.viewport && cursors.viewport.h) || 1000;
+    const wr = wrap.getBoundingClientRect();
+    if (!wr.width) return;
+    const scale = Math.min(wr.width / vw, wr.height / vh);
+    const dw = vw * scale, dh = vh * scale;
+    layer.style.left = ((wr.width - dw) / 2) + 'px';
+    layer.style.top = ((wr.height - dh) / 2) + 'px';
+    layer.style.width = dw + 'px';
+    layer.style.height = dh + 'px';
+  }
+  function renderCursors(cursors, layer) {
+    if (!cursors || !layer) return;
+    const wrap = layer.closest('.screen-wrap') || $('#screen-wrap');
+    ensureCursors(layer);
+    fitLayer(layer, cursors, wrap);
+    const map = cursors.cursors || {};
+    CURSOR_ORDER.forEach(b => {
+      const el = layer.querySelector('[data-bot="' + b + '"]');
+      const c = map[b];
+      if (!el || !c) return;
+      const x = Math.max(0, Math.min(1, +c.x || 0)), y = Math.max(0, Math.min(1, +c.y || 0));
+      el.style.left = (x * 100) + '%';
+      el.style.top = (y * 100) + '%';
+      el.classList.toggle('idle', !!c.idle);
+      el.classList.toggle('active', !c.idle && c.ts && (Date.now() / 1000 - c.ts) < 60);
+      el.classList.toggle('flip', x > 0.62);
+      el.querySelector('.msg').textContent = c.bubble || 'a aguardar';
+      const when = el.querySelector('.when');
+      if (c.ts && (c.clock || c.age)) { when.hidden = false; when.textContent = [c.clock, c.age].filter(Boolean).join(' · '); }
+      else { when.hidden = true; when.textContent = ''; }
+    });
+  }
   function loadScreen() {
     if (!lastState || !lastState.last_frame_at || lastState.private) return;
     const back = front === 'a' ? 'b' : 'a', img = $('#screen-' + back);
-    img.onload = () => { img.classList.remove('back'); $('#screen-' + front).classList.add('back'); front = back; };
+    img.onload = () => { img.classList.remove('back'); $('#screen-' + front).classList.add('back'); front = back; if (lastState.cursors) renderCursors(lastState.cursors, $('#cursor-layer')); };
     setImg(img, screenUrl());
+    if (lastState.cursors) renderCursors(lastState.cursors, $('#cursor-layer'));
   }
   $('#screen-wrap').onclick = () => openScreen();
+  addEventListener('resize', () => { if (lastState && lastState.cursors) renderCursors(lastState.cursors, $('#cursor-layer')); });
 
   function botIcons(activeBot) {
     $('#bot-icons').innerHTML = Object.keys(COLORS).map(b => `<div class="bot-icon${b === activeBot ? ' active' : ''}" style="color:${COLORS[b]}" title="${b}"><svg viewBox="0 0 24 24" fill="${COLORS[b]}">${ICONS[b]}</svg></div>`).join('');
@@ -268,7 +323,7 @@
 
   // ---------- overlays ----------
   function overlay(html) { $('#overlay-body').innerHTML = `<button class="link" id="ov-close">‹ Back</button>` + html; $('#overlay').hidden = false; $('#ov-close').onclick = () => $('#overlay').hidden = true; }
-  function openScreen() { overlay(`<div class="screen-wrap" style="margin-top:8px;border-radius:12px;overflow:hidden;touch-action:pinch-zoom"><img id="ov-screen" style="object-fit:contain"></div><a class="btn ghost" style="display:flex;align-items:center;justify-content:center;text-decoration:none" href="${lastState && lastState.positions[0] ? esc(lastState.positions[0].link) : 'https://fomo.family/r/profeta7zz'}" target="_blank" rel="noopener">Open on FOMO</a>`); setImg($('#ov-screen'), screenUrl()); }
+  function openScreen() { overlay(`<div class="screen-wrap" style="margin-top:8px;border-radius:12px;overflow:hidden;touch-action:pinch-zoom"><img id="ov-screen" style="object-fit:contain"><div id="ov-cursors" class="cursor-layer" aria-hidden="true"></div></div><a class="btn ghost" style="display:flex;align-items:center;justify-content:center;text-decoration:none" href="${lastState && lastState.positions[0] ? esc(lastState.positions[0].link) : 'https://fomo.family/r/profeta7zz'}" target="_blank" rel="noopener">Open on FOMO</a>`); setImg($('#ov-screen'), screenUrl()); if (lastState && lastState.cursors) renderCursors(lastState.cursors, $('#ov-cursors')); }
   async function openCoin(mint) {
     overlay('<div class="empty">Loading…</div>');
     try { const d = await api('/coin/' + mint); const c = d.coin || {}, p = d.position;
@@ -315,14 +370,14 @@
 
   // ---------- loops ----------
   async function tick() {
-    let wait = PLANB ? 15000 : 2000;
-    try { const first = !lastState; renderState(await api('/state')); if (first) loadBots(); } catch (e) { if (e.message === '401') return; wait = renderError() * 1000; }
+    let wait = PLANB ? PERIOD * 1000 : 2000;
+    try { const first = !lastState; renderState(await api('/state')); if (first) loadBots(); loadScreen(); } catch (e) { if (e.message === '401') return; wait = renderError() * 1000; }
     setTimeout(tick, wait);
   }
   if (boot()) {
     botIcons(null); bindGo(); tick(); loadChart(); loadTerminal(); loadTradeDetails(); loadBots(); api('/settings').then(s => window.__set = s.settings).catch(() => { });
-    setInterval(loadChart, PLANB ? 15000 : 5000); setInterval(loadTerminal, PLANB ? 15000 : 2000); setInterval(loadTradeDetails, PLANB ? 15000 : 5000);
-    setInterval(loadBots, 15000); setInterval(loadScreen, PLANB ? 15000 : 1000);
+    setInterval(loadChart, PLANB ? PERIOD * 1000 : 5000); setInterval(loadTerminal, PLANB ? PERIOD * 1000 : 2000); setInterval(loadTradeDetails, PLANB ? PERIOD * 1000 : 5000);
+    setInterval(loadBots, PLANB ? PERIOD * 1000 : 15000); setInterval(loadScreen, PLANB ? PERIOD * 1000 : 1000);
     if ('serviceWorker' in navigator && !FIX) navigator.serviceWorker.register('sw.js').catch(() => { });
   }
 })();

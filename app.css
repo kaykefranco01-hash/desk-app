@@ -37,9 +37,19 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .screen-head{display:flex;align-items:center;gap:8px;padding:12px 14px;font-size:14px}
 .dot{width:8px;height:8px;border-radius:50%}.dot.red{background:var(--red)}.dot.green{background:var(--green)}.dot.grey{background:var(--ter)}
 .lane{margin-left:auto;font-weight:600;font-size:13px;color:var(--sec)}
-.screen-wrap{position:relative;aspect-ratio:16/9;background:#0b0b0c}
-.screen-wrap img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.screen-wrap img.back{visibility:hidden}
-.screen-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--sec);background:#0b0b0c}
+.screen-wrap{position:relative;aspect-ratio:16/10;background:#0b0b0c}
+.screen-wrap img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#0b0b0c}.screen-wrap img.back{visibility:hidden}
+.screen-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--sec);background:#0b0b0c;z-index:4}
+.cursor-layer{position:absolute;inset:0;pointer-events:none;z-index:3;overflow:hidden}
+.cur{position:absolute;transform:translate(-2px,-2px);transition:left .8s ease-out,top .8s ease-out;will-change:left,top;z-index:1}
+.cur.active{z-index:3}
+.cur .tag{font:700 9px/1 var(--txt);color:currentColor;text-shadow:0 0 3px #000,0 1px 2px #000;margin-left:14px;margin-top:-16px;white-space:nowrap}
+.cur .bubble{max-width:132px;margin:2px 0 0 14px;background:rgba(0,0,0,.82);color:#fff;padding:4px 6px;border-radius:8px;border:1px solid rgba(255,255,255,.12);box-shadow:0 2px 8px #0008}
+.cur .bubble .msg{font:600 10px/1.25 var(--txt);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.cur .bubble .when{margin-top:2px;font:500 9px/1.2 var(--mono);color:var(--sec)}
+.cur.idle{opacity:.78}
+.cur.flip .tag,.cur.flip .bubble{margin-left:0;margin-right:16px;transform:translateX(-100%)}
+@media (prefers-reduced-motion:reduce){.cur{transition:none}}
 .last-order{padding:10px 14px 12px;font-size:13px}
 .checks{color:var(--green);letter-spacing:1px}
 .term-card{padding:12px}

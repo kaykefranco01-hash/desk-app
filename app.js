@@ -108,17 +108,19 @@
     odometer($('#balance'), st.balance);
     $('#mode-pill').hidden = false; $('#mode-pill').textContent = st.mode; $('#mode-pill').className = 'pill ' + (st.mode === 'LIVE' ? 'green' : 'orange');
     const t = st.today_pct || 0; $('#today').textContent = (t >= 0 ? '+' : '') + t.toFixed(2) + '% today'; $('#today').className = t >= 0 ? 'green' : 'red';
-    $('#mult').hidden = !st.multiplier; $('#mult').textContent = (st.multiplier || 0).toFixed(2) + '×';
-    $('#wl').innerHTML = `${st.trades} trade${st.trades === 1 ? '' : 's'} · <span class="green">${st.wins} W</span> · <span class="red">${st.losses} L</span>`;
+    $('#mult').hidden = st.multiplier == null; $('#mult').textContent = (st.multiplier || 0).toFixed(2) + 'x';
+    const start = st.start_cash || 100, pl = st.balance - start; $('#pnl').innerHTML = `<span class="${pl >= 0 ? 'green' : 'red'}">${pl >= 0 ? '+' : '-'}${money(Math.abs(pl))}</span>`;
+    $('#wl').innerHTML = `${st.trades} trade${st.trades === 1 ? '' : 's'} <span class="green">${st.wins}W</span> <span class="red">${st.losses}L</span>`;
+    agentAlive();
     const mk = $('#market'); mk.textContent = st.market; mk.className = 'pill small ' + (st.market_mode === 'RED' ? 'red' : st.market_mode === 'GREEN' ? 'green' : 'grey');
     $('#fomo-state').textContent = st.fomo_logged_out ? 'FOMO logged out' : (st.fomo_ok_at ? 'FOMO ok ' + ago(st.fomo_ok_at) : '');
     const sec = Math.max(0, Math.floor(Date.now() / 1000 - st.started_at));
     $('#elapsed').textContent = [sec / 3600, sec / 60 % 60, sec % 60].map(v => String(Math.floor(v)).padStart(2, '0')).join(':');
-    $('#working').classList.toggle('idle', !st.in_window); $('#working-label').textContent = st.in_window ? 'Working' : 'Waiting for night';
+    const work = st.in_window || st.in_buy_window; $('#working').classList.toggle('idle', !work); $('#working-label').textContent = work ? 'Working' : 'Waiting for night';
     const fresh = st.last_frame_at && (Date.now() / 1000 - st.last_frame_at) < (PLANB ? 60 : 5);
     $('#live-dot').className = 'dot ' + (fresh ? 'red' : 'grey');
     $('#live-label').textContent = fresh ? "Live · Bot's computer" : (st.last_frame_at ? 'Last frame ' + hm(st.last_frame_at) : "Bot's computer");
-    $('#lane').textContent = st.lane || 'Idle'; $('#lane').style.color = st.lane_bot ? COLORS[st.lane_bot] : '';
+    $('#lane').textContent = st.lane ? '👆 ' + st.lane : (fresh ? '👁️ Watching' : '💤 Idle'); $('#lane').style.color = st.lane_bot ? COLORS[st.lane_bot] : '';
     $('#screen-private').hidden = !st.private; $('#screen-empty').hidden = !!st.last_frame_at || st.private;
     const o = st.last_order;
     $('#last-order').innerHTML = o ? `${av(o.symbol, o.image, o.mint, 'sm')}<span>${o.side === 'buy' ? 'Bought' : 'Sold'} ${esc(o.symbol || o.mint.slice(0, 4))} · ${money(o.fill_usd || o.usd)} · ${o.mode === 'PAPER' ? 'PAPER' : (o.status === 'done' ? 'verified' : esc(o.status))} <span class="checks">${o.mode === 'PAPER' ? '' : [o.screen_ok, o.api_ok, o.chain_ok].map(x => x ? '✓' : '·').join('')}</span></span>` : 'No orders yet';
@@ -300,27 +302,105 @@
   $('#screen-wrap').onclick = () => openScreen();
   addEventListener('resize', () => { if (lastState && lastState.cursors) renderCursors(lastState.cursors, $('#cursor-layer')); });
 
-  function botIcons(activeBot) {
-    $('#bot-icons').innerHTML = Object.keys(COLORS).map(b => `<div class="bot-icon${b === activeBot ? ' active' : ''}" style="color:${COLORS[b]}" title="${b}"><svg viewBox="0 0 24 24" fill="${COLORS[b]}">${ICONS[b]}</svg></div>`).join('');
+  // ---------- agents row + log (savipww-style, t490u). Driven only by real desk2 decision rows. ----------
+  const REDUCE = matchMedia('(prefers-reduced-motion: reduce)');
+  const AGENTS = [
+    { k: 'scanner', label: 'SCANNER', color: '#64d2ff', bots: ['scanner'], hb: 'scanner', acc: '<line x1="32" y1="9" x2="32" y2="2" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><circle cx="32" cy="2.6" r="2.6" fill="#fff"/>' },
+    { k: 'auditor', label: 'AUDITOR', color: '#ffd60a', bots: ['analyst'], hb: 'analyst', acc: '<circle cx="41" cy="28" r="9" fill="none" stroke="#222" stroke-width="2.2"/><line x1="47" y1="35" x2="53" y2="45" stroke="#222" stroke-width="2.4" stroke-linecap="round"/>' },
+    { k: 'chart', label: 'CHART READER', color: '#ff9f0a', bots: ['chart'], hb: 'brain', acc: '<polyline points="18,14 25,9 31,12 38,5 46,8" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>' },
+    { k: 'risk', label: 'RISK', color: '#ff6b9a', bots: ['risk'], hb: 'risk', acc: '<path d="M16 17q16-14 32 0" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/>' },
+    { k: 'brain', label: 'BRAIN', color: '#bf5af2', bots: ['brain', 'executor'], hb: 'brain', acc: '<path d="M20 13q3-7 8-3q4-6 8 0q5-4 8 3" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/>' }
+  ];
+  const AGENT_OF = {}; AGENTS.forEach(a => a.bots.forEach(b => AGENT_OF[b] = a));
+  const LOG_NAME = { scanner: 'SCANNER', analyst: 'AUDITOR', chart: 'CHART READER', risk: 'RISK', brain: 'BRAIN', executor: 'EXECUTOR' };
+  const LOG_COLOR = { scanner: '#64d2ff', analyst: '#ffd60a', chart: '#ff9f0a', risk: '#ff6b9a', brain: '#bf5af2', executor: '#00d35a' };
+  const EMO = { kill: '❌', pass: '✅', reject: '⛔', skip: '✋', bought: '🟢', sold: '💰', stopped: '🛑', size: '💵', click: '👆', fail: '⚠️', shadow: '👻', dip: '⏬', wait: '⏳', social: '💬', mint: '🪙' };
+  const faceTimers = {}; const marks = {};
+  function faceSvg(a) {
+    return `<svg viewBox="0 0 64 64" class="face-svg" aria-hidden="true"><defs><radialGradient id="g-${a.k}" cx="38%" cy="32%" r="70%"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".35" stop-color="${a.color}"/><stop offset="1" stop-color="${a.color}" stop-opacity=".78"/></radialGradient></defs>
+      <circle cx="32" cy="34" r="27" fill="url(#g-${a.k})"/>${a.acc}
+      <g class="eyes"><ellipse cx="23" cy="30" rx="6" ry="7" fill="#fff"/><ellipse cx="41" cy="30" rx="6" ry="7" fill="#fff"/>
+      <g class="pupils"><circle cx="24" cy="31" r="3.2" fill="#111"/><circle cx="42" cy="31" r="3.2" fill="#111"/></g></g>
+      <circle cx="16" cy="41" r="3" fill="#fff" opacity=".25"/><circle cx="48" cy="41" r="3" fill="#fff" opacity=".25"/>
+      <path class="mouth" d="M24 44q8 7 16 0" fill="none" stroke="#111" stroke-width="2.6" stroke-linecap="round"/></svg>`;
   }
+  function renderAgents() {
+    const box = $('#agents'); if (!box || box.children.length) return;
+    box.innerHTML = AGENTS.map(a => `<div class="agent" data-a="${a.k}" style="--c:${a.color}"><div class="face"><span class="ring"></span>${faceSvg(a)}<span class="mark" hidden></span></div><div class="alabel">${a.label}</div></div>`).join('');
+  }
+  function agentAlive() {
+    const hb = (lastState && lastState.heartbeats) || {}, now = Date.now() / 1000;
+    AGENTS.forEach(a => { const el = $(`.agent[data-a="${a.k}"]`); if (el) el.classList.toggle('off', !(hb[a.hb] && now - hb[a.hb] < 120)); });
+  }
+  function flash(bot, row) {
+    const a = AGENT_OF[bot]; if (!a) return; const el = $(`.agent[data-a="${a.k}"]`); if (!el) return;
+    el.classList.remove('on'); void el.offsetWidth; el.classList.add('on');
+    clearTimeout(faceTimers[a.k]); faceTimers[a.k] = setTimeout(() => el.classList.remove('on'), 2200);
+    if (row && row.verdict === 'vote' && /vote (yes|no)/.test(row.text)) {
+      const yes = /vote yes/.test(row.text), m = el.querySelector('.mark');
+      m.hidden = false; m.textContent = yes ? '✓' : '✗'; m.className = 'mark ' + (yes ? 'yes' : 'no');
+      clearTimeout(marks[a.k]); marks[a.k] = setTimeout(() => { m.hidden = true; }, 30000);
+    }
+  }
+  function logLine(r) {
+    const div = document.createElement('div'); div.className = 'ln';
+    const bot = r.bot === 'executor' && r.verdict === 'bought' ? 'executor' : r.bot;
+    const name = r.bot === 'executor' && r.verdict === 'bought' ? 'FILL' : (LOG_NAME[r.bot] || String(r.bot).toUpperCase());
+    const emo = /^New coin/.test(r.text) ? '🆕' : (EMO[r.verdict] || '');
+    div.innerHTML = `<span class="t">${hms(r.ts)}</span><span class="b" style="color:${LOG_COLOR[bot] || '#fff'}">${esc(name)}</span><span class="x">${emo ? emo + ' ' : ''}${esc(r.text)}</span>`;
+    return div;
+  }
+  let logQ = [], logNext = 0;
+  function showRow(r, animate) {
+    const box = $('#terminal'); const el = logLine(r); if (animate && !REDUCE.matches) el.classList.add('new');
+    box.appendChild(el); while (box.children.length > 120) box.firstChild.remove();
+    box.scrollTop = box.scrollHeight;
+    flash(r.bot, r);
+    const m = r.text.match(/(\d)\/5 agree (🤝|✋)/); if (m) { const c = $('#vote-chip'); c.hidden = false; c.textContent = `${m[2]} ${m[1]}/5 agree`; c.className = 'pill small ' + (m[2] === '🤝' ? 'green' : 'grey'); }
+    $('#term-coin').innerHTML = r.symbol ? `${av(r.symbol, r.image, r.mint, 'sm')}<span>${esc(r.symbol)}</span>` : '—';
+  }
+  function dripLog() {
+    if (logQ.length && Date.now() >= logNext) {
+      const r = logQ.shift(); showRow(r, true);
+      const span = (PLANB ? PERIOD * 1000 : 2000) * 0.9;
+      logNext = Date.now() + Math.max(160, Math.min(1400, span / Math.max(1, logQ.length)));
+    }
+  }
+  setInterval(dripLog, 120);
   async function loadTerminal() {
     try {
       const d = await api('/terminal?after=' + termAfter);
       const rows = PLANB ? d.rows.filter(r => r.id > termAfter) : d.rows; if (!rows.length) return;
-      const box = $('#terminal'); if (!termAfter) box.innerHTML = '';
-      rows.forEach(r => { termAfter = Math.max(termAfter, r.id);
-        const div = document.createElement('div'); div.className = 'ln';
-        div.innerHTML = `<span class="t">${hms(r.ts)}</span><span class="b" style="color:${COLORS[r.bot] || '#fff'}">${esc(r.bot.toUpperCase())}:</span><span>${esc(r.text)}</span>`;
-        box.appendChild(div); });
-      while (box.children.length > 200) box.firstChild.remove();
-      box.scrollTop = box.scrollHeight;
-      const last = rows[rows.length - 1]; botIcons(last.bot);
-      $('#term-coin').innerHTML = last.symbol ? `${av(last.symbol, last.image, last.mint, 'sm')}<span>${esc(last.symbol)}${last.mint ? ' ' + esc(last.mint.slice(0, 4) + '…' + last.mint.slice(-4)) : ''}</span>` : '—';
+      const first = !termAfter; if (first) $('#terminal').innerHTML = '';
+      rows.forEach(r => termAfter = Math.max(termAfter, r.id));
+      if (first) { rows.slice(0, -6).slice(-14).forEach(r => showRow(r, false)); logQ.push(...rows.slice(-6)); }
+      else logQ.push(...rows);
+      if (logQ.length > 80) logQ = logQ.slice(-80);
     } catch (e) { }
+  }
+  // ---------- toasts: only for new real activity rows after the page loaded ----------
+  let actSeen = null;
+  function toast(html, cls) {
+    const t = document.createElement('div'); t.className = 'toast ' + (cls || ''); t.innerHTML = html;
+    $('#toasts').appendChild(t); while ($('#toasts').children.length > 3) $('#toasts').firstChild.remove();
+    setTimeout(() => t.classList.add('out'), 5200); setTimeout(() => t.remove(), 5800);
+  }
+  function toastRows(rows) {
+    const maxId = rows.reduce((m, r) => Math.max(m, r.id || 0), 0);
+    if (actSeen == null) { actSeen = maxId; return; }
+    rows.filter(r => r.id > actSeen).sort((a, b) => a.id - b.id).forEach(r => {
+      const sym = esc(String(r.title).replace(/^(Bought|Sold|Stopped|Copied|Vote|Rejected) /, ''));
+      const neg = String(r.value).startsWith('-');
+      if (r.kind === 'bought' || r.kind === 'copied') toast(`${av(r.title, r.image, r.mint, 'sm')}<span><b>Bought</b> ${sym} · ${esc(r.value)} <span class="tertiary">PAPER</span></span>`, 'buy');
+      else if (r.kind === 'sold' || r.kind === 'stopped') toast(`${av(r.title, r.image, r.mint, 'sm')}<span><b>${r.kind === 'sold' ? 'Sold' : 'Stopped'}</b> ${sym} <span class="${neg ? 'red' : 'green'}">${esc(r.value)}</span> <span class="tertiary">PAPER</span></span>`, neg ? 'loss' : 'win');
+      else if (r.kind === 'vote' && r.value === 'buy') toast(`<span>🤝 <b>${esc(r.title)}</b> · buy</span>`, 'buy');
+    });
+    actSeen = Math.max(actSeen, maxId);
   }
   async function loadTradeDetails() {
     try {
       const d = await api('/activity'); const rows = d.rows || [];
+      toastRows(rows);
       renderActivity($('#home-activity'), rows.slice(0, 5));
       const buy = rows.find(r => r.kind === 'bought' || r.kind === 'copied');
       if (!buy) { $('#trade-details').innerHTML = '<div class="empty">Waiting for the first trade</div>'; return; }
@@ -335,7 +415,7 @@
     scanner: (d) => { const k = d.rows.find(r => r.verdict === 'kill'), p = d.rows.find(r => r.verdict === 'pass');
       return `<div class="count">${d.today} pools today</div>` + (k ? `<div class="line strike">${esc(k.text)}</div>` : '') + (p ? `<div class="line">${esc(p.text)}</div>` : ''); },
     analyst: (d) => `<div class="count">${d.today} taken apart</div><div class="strips">${'<i></i>'.repeat(8)}</div>` + (d.rows[0] ? `<div class="line">${esc(d.rows[0].text)}</div>` : ''),
-    brain: (d) => `<div class="count">Sizing</div>` + (d.rows[0] ? `<div class="line">${esc(d.rows[0].text)}</div>` : '') + `<div class="line secondary small">80+ = full size · under 80 = half size</div>`,
+    brain: (d) => `<div class="count">Sizing</div>` + (d.rows[0] ? `<div class="line">${esc(d.rows[0].text)}</div>` : '') + `<div class="line secondary small">4 of 5 agents vote · stop -25% · 80+ = full size</div>`,
     executor: (d) => `<div class="count">${lastState ? lastState.trades : 0} trades</div>` + (d.rows[0] ? `<div class="line">${esc(d.rows[0].text)}</div>` : ''),
     risk: (d) => `<div class="count">Guarding</div><div class="line"><span class="pill red small">stop -${(window.__set && window.__set.risk && window.__set.risk.stop_pct.value) || 25}%</span> <span class="pill green small">trail ${(window.__set && window.__set.executor && window.__set.executor.trail_pct.value) || 40}%</span></div>` + (d.rows[0] ? `<div class="line">${esc(d.rows[0].text)}</div>` : '')
   };
@@ -473,7 +553,7 @@
     setTimeout(tick, wait);
   }
   if (boot()) {
-    botIcons(null); bindGo(); tick(); loadChart(); loadTerminal(); loadTradeDetails(); loadBots(); api('/settings').then(s => window.__set = s.settings).catch(() => { });
+    renderAgents(); bindGo(); tick(); loadChart(); loadTerminal(); loadTradeDetails(); loadBots(); api('/settings').then(s => window.__set = s.settings).catch(() => { });
     setInterval(loadChart, PLANB ? PERIOD * 1000 : 5000); setInterval(loadTerminal, PLANB ? PERIOD * 1000 : 2000); setInterval(loadTradeDetails, PLANB ? PERIOD * 1000 : 5000);
     setInterval(loadBots, PLANB ? PERIOD * 1000 : 15000); setInterval(loadScreen, PLANB ? PERIOD * 1000 : 1000);
     if ('serviceWorker' in navigator && !FIX) navigator.serviceWorker.register('sw.js').catch(() => { });

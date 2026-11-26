@@ -41,7 +41,7 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .screen-wrap img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#0b0b0c}.screen-wrap img.back{visibility:hidden}
 .screen-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--sec);background:#0b0b0c;z-index:4}
 .cursor-layer{position:absolute;inset:0;pointer-events:none;z-index:3;overflow:hidden}
-.cur{position:absolute;transform:translate(-2px,-2px);transition:left .8s ease-out,top .8s ease-out;will-change:left,top;z-index:1}
+.cur{position:absolute;transform:translate(-2px,-2px);transition:none;will-change:left,top;z-index:1}
 .cur.hover,.cur.type,.cur.click{z-index:4}
 .cur .ptr{display:block}
 .cur .tag{font:700 9px/1 var(--txt);color:currentColor;text-shadow:0 0 3px #000,0 1px 2px #000;margin-left:14px;margin-top:-16px;white-space:nowrap}
@@ -116,7 +116,7 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .disc small{color:var(--sec)}
 .chip{display:inline-flex;align-items:center;gap:4px;background:var(--card2);border-radius:10px;padding:2px 8px;font-size:12px}
 .stats3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}.stats3 div{background:var(--card);border-radius:12px;padding:10px}.stats3 small{color:var(--sec);display:block}
-@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+@media (prefers-reduced-motion:reduce){*:not(.cursor-layer):not(.cursor-layer *){transition:none!important;animation:none!important}}
 [hidden]{display:none!important}
 .odometer .d .s span{display:block;height:1.05em;line-height:1.05em}
 .odometer>span{line-height:1.05em}

@@ -191,6 +191,82 @@
     layer.style.width = dw + 'px';
     layer.style.height = dh + 'px';
   }
+  const cursorPlay = {};
+  let cursorRaf = 0;
+  function ease(t) { t = Math.max(0, Math.min(1, t)); return t * t * (3 - 2 * t); }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function posAlong(path, u, period, loop) {
+    if (!path || !path.length) return null;
+    if (path.length === 1) return path[0];
+    period = period || 10;
+    if (loop) {
+      const w = ((u % period) + period) % period;
+      const f = (w / period) * path.length;
+      const i = Math.floor(f) % path.length;
+      const j = (i + 1) % path.length;
+      const e = ease(f - Math.floor(f));
+      const A = path[i], B = path[j];
+      return { x: lerp(+A.x, +B.x, e), y: lerp(+A.y, +B.y, e), action: (e < 0.5 ? A.action : B.action) || 'hover' };
+    }
+    const t0 = path[0].ts, t1 = path[path.length - 1].ts;
+    if (t0 != null && t1 != null && t1 > t0) {
+      if (u <= 0) return path[0];
+      const t = path[0].ts + u;
+      if (t >= t1) return path[path.length - 1];
+      for (let i = 0; i < path.length - 1; i++) {
+        const A = path[i], B = path[i + 1];
+        if (t >= A.ts && t <= B.ts) {
+          const e = ease((t - A.ts) / Math.max(1e-6, B.ts - A.ts));
+          return { x: lerp(+A.x, +B.x, e), y: lerp(+A.y, +B.y, e), action: (e < 0.5 ? A.action : B.action) || A.action || 'hover' };
+        }
+      }
+    }
+    const w = Math.max(0, Math.min(period, u));
+    const f = (w / period) * (path.length - 1);
+    const i = Math.min(path.length - 2, Math.floor(f));
+    const e = ease(f - i);
+    const A = path[i], B = path[i + 1];
+    return { x: lerp(+A.x, +B.x, e), y: lerp(+A.y, +B.y, e), action: (e < 0.5 ? A.action : B.action) || 'hover' };
+  }
+  function placeCursor(el, b, c, pos) {
+    if (!el || !pos) return;
+    const x = Math.max(0, Math.min(1, +pos.x || 0)), y = Math.max(0, Math.min(1, +pos.y || 0));
+    el.style.left = (x * 100) + '%';
+    el.style.top = (y * 100) + '%';
+    const act = pos.action || actionOf(b, c || {});
+    el.classList.toggle('idle', act === 'idle');
+    el.classList.toggle('hover', act === 'hover');
+    el.classList.toggle('type', act === 'type');
+    el.classList.toggle('flip', x > 0.62);
+    const caret = el.querySelector('.caret'); if (caret) caret.hidden = act !== 'type';
+    if (act === 'click' && el.dataset.ts !== String((c && c.ts) || '')) {
+      el.classList.remove('click'); void el.offsetWidth; el.classList.add('click');
+      el.dataset.ts = String((c && c.ts) || '');
+      setTimeout(() => el.classList.remove('click'), 800);
+    } else if (act !== 'click') { el.classList.remove('click'); }
+  }
+  function applyCursors() {
+    const now = Date.now() / 1000;
+    document.querySelectorAll('.cursor-layer').forEach(layer => {
+      CURSOR_ORDER.forEach(b => {
+        const el = layer.querySelector('[data-bot="' + b + '"]');
+        const st = cursorPlay[b];
+        if (!el || !st) return;
+        let pos;
+        if (st.path && st.path.length) {
+          const u = st.loop ? now : (now - st.t0);
+          pos = posAlong(st.path, u, st.period, st.loop && st.path.length >= 2);
+        } else {
+          pos = st.cur;
+        }
+        placeCursor(el, b, st.cur, pos);
+      });
+    });
+  }
+  function tickCursors() {
+    applyCursors();
+    cursorRaf = requestAnimationFrame(tickCursors);
+  }
   function renderCursors(cursors, layer) {
     if (!cursors || !layer) return;
     const wrap = layer.closest('.screen-wrap') || $('#screen-wrap');
@@ -198,24 +274,21 @@
     fitLayer(layer, cursors, wrap);
     const map = cursors.cursors || {};
     CURSOR_ORDER.forEach(b => {
-      const el = layer.querySelector('[data-bot="' + b + '"]');
       const c = map[b];
-      if (!el || !c) return;
-      const x = Math.max(0, Math.min(1, +c.x || 0)), y = Math.max(0, Math.min(1, +c.y || 0));
-      el.style.left = (x * 100) + '%';
-      el.style.top = (y * 100) + '%';
-      const act = actionOf(b, c);
-      el.classList.toggle('idle', act === 'idle');
-      el.classList.toggle('hover', act === 'hover');
-      el.classList.toggle('type', act === 'type');
-      el.classList.toggle('flip', x > 0.62);
-      const caret = el.querySelector('.caret'); if (caret) caret.hidden = act !== 'type';
-      if (act === 'click' && el.dataset.ts !== String(c.ts || '')) {
-        el.classList.remove('click'); void el.offsetWidth; el.classList.add('click');
-        el.dataset.ts = String(c.ts || '');
-        setTimeout(() => el.classList.remove('click'), 800);
-      } else if (act !== 'click') { el.classList.remove('click'); }
+      if (!c) { delete cursorPlay[b]; return; }
+      const path = Array.isArray(c.path) ? c.path : [];
+      const period = +c.period || 10;
+      const loop = !!c.loop;
+      const key = path.map(p => (+p.x).toFixed(3) + ',' + (+p.y).toFixed(3)).join('>');
+      const prev = cursorPlay[b];
+      if (!prev || prev.key !== key || prev.loop !== loop) {
+        cursorPlay[b] = { path, period, loop, key, t0: Date.now() / 1000, cur: c };
+      } else {
+        prev.path = path; prev.period = period; prev.cur = c;
+      }
     });
+    applyCursors();
+    if (!cursorRaf) cursorRaf = requestAnimationFrame(tickCursors);
   }
   function loadScreen() {
     if (!lastState || !lastState.last_frame_at || lastState.private) return;

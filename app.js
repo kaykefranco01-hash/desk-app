@@ -122,7 +122,7 @@
     $('#screen-private').hidden = !st.private; $('#screen-empty').hidden = !!st.last_frame_at || st.private;
     const o = st.last_order;
     $('#last-order').innerHTML = o ? `${av(o.symbol, o.image, o.mint, 'sm')}<span>${o.side === 'buy' ? 'Bought' : 'Sold'} ${esc(o.symbol || o.mint.slice(0, 4))} · ${money(o.fill_usd || o.usd)} · ${o.mode === 'PAPER' ? 'PAPER' : (o.status === 'done' ? 'verified' : esc(o.status))} <span class="checks">${o.mode === 'PAPER' ? '' : [o.screen_ok, o.api_ok, o.chain_ok].map(x => x ? '✓' : '·').join('')}</span></span>` : 'No orders yet';
-    if (st.cursors) renderCursors(st.cursors, $('#cursor-layer'));
+    if (st.cursors) { renderCursors(st.cursors, $('#cursor-layer')); if (st.cursors.work) renderWork(st.cursors.work); }
     $('#bots-head').textContent = `Bots · ${Object.keys(COLORS).filter(b => st.heartbeats && st.heartbeats[b] && Date.now() / 1000 - st.heartbeats[b] < 120).length} running`;
     const pos = st.positions || [];
     $('#open-pos-wrap').hidden = !pos.length;
@@ -163,11 +163,20 @@
     if (!layer || layer.dataset.ready) return layer;
     layer.innerHTML = CURSOR_ORDER.map(b => `<div class="cur" data-bot="${b}" style="color:${CURSOR_COLORS[b]};left:8%;top:80%">
       <svg class="ptr" width="18" height="18" viewBox="0 0 22 22"><path d="M2 2 L2 18 L7 13 L11 21 L14 19.5 L10 12 L17 12 Z" fill="${CURSOR_COLORS[b]}" stroke="#000" stroke-width="1.2"/></svg>
+      <i class="rip"></i><i class="caret" hidden></i>
       <div class="tag">@${b}</div>
-      <div class="bubble"><div class="msg">a aguardar</div><div class="when" hidden></div></div>
     </div>`).join('');
     layer.dataset.ready = '1';
     return layer;
+  }
+  function actionOf(b, c) {
+    if (c.action) return c.action;
+    if (b === 'executor' && lastState && lastState.lane_bot === 'executor') return 'type';
+    if (!c.ts) return (b === 'risk' && lastState && lastState.positions && lastState.positions.length) ? 'hover' : 'idle';
+    const age = Date.now() / 1000 - c.ts;
+    if (age < 8) return (b === 'executor' && /Clicking Buy/.test(c.bubble || '')) ? 'type' : 'click';
+    if (age < 45) return 'hover';
+    return 'idle';
   }
   function fitLayer(layer, cursors, wrap) {
     if (!layer || !wrap) return;
@@ -195,13 +204,17 @@
       const x = Math.max(0, Math.min(1, +c.x || 0)), y = Math.max(0, Math.min(1, +c.y || 0));
       el.style.left = (x * 100) + '%';
       el.style.top = (y * 100) + '%';
-      el.classList.toggle('idle', !!c.idle);
-      el.classList.toggle('active', !c.idle && c.ts && (Date.now() / 1000 - c.ts) < 60);
+      const act = actionOf(b, c);
+      el.classList.toggle('idle', act === 'idle');
+      el.classList.toggle('hover', act === 'hover');
+      el.classList.toggle('type', act === 'type');
       el.classList.toggle('flip', x > 0.62);
-      el.querySelector('.msg').textContent = c.bubble || 'a aguardar';
-      const when = el.querySelector('.when');
-      if (c.ts && (c.clock || c.age)) { when.hidden = false; when.textContent = [c.clock, c.age].filter(Boolean).join(' · '); }
-      else { when.hidden = true; when.textContent = ''; }
+      const caret = el.querySelector('.caret'); if (caret) caret.hidden = act !== 'type';
+      if (act === 'click' && el.dataset.ts !== String(c.ts || '')) {
+        el.classList.remove('click'); void el.offsetWidth; el.classList.add('click');
+        el.dataset.ts = String(c.ts || '');
+        setTimeout(() => el.classList.remove('click'), 800);
+      } else if (act !== 'click') { el.classList.remove('click'); }
     });
   }
   function loadScreen() {
@@ -273,6 +286,15 @@
   }
 
   // ---------- activity ----------
+  function renderWork(work) {
+    const box = $('#desk-work'); if (!box) return;
+    work = work || (lastState && lastState.cursors && lastState.cursors.work);
+    if (!work || !(work.risk || (work.decisions && work.decisions.length) || work.layer)) { box.hidden = true; box.innerHTML = ''; return; }
+    const dec = (work.decisions || []).map(r => `<div class="ln"><span class="t">${esc(r.clock || hm(r.ts) || '')}</span><span class="b" style="color:${CURSOR_COLORS[r.bot] || COLORS[r.bot] || '#fff'}">@${esc(r.bot)}</span><span>${esc(r.text)}</span></div>`).join('');
+    const layer = work.layer ? `<div class="ln"><span class="t">${esc(work.layer.clock || '')}</span><span class="b" style="color:${CURSOR_COLORS.risk}">@risk</span><span>${esc(work.layer.text)}</span></div>` : '';
+    box.hidden = false;
+    box.innerHTML = `<h3>Desk work</h3>${work.risk ? `<pre>${esc(work.risk)}</pre>` : ''}${dec}${layer}`;
+  }
   function renderActivity(el, rows) {
     if (!rows.length) { el.innerHTML = '<div class="empty">Nothing yet tonight</div>'; return; }
     el.innerHTML = rows.map(r => { const neg = String(r.value).startsWith('-');
@@ -283,6 +305,7 @@
   }
   async function loadActivity(more) {
     try { const d = await api('/activity' + (more && actBefore ? '?before=' + actBefore : '')); const rows = d.rows || [];
+      if (!more) renderWork(d.work);
       if (more) { const tmp = document.createElement('div'); renderActivity(tmp, rows); $('#activity-list').append(...tmp.children); } else renderActivity($('#activity-list'), rows);
       actBefore = rows.length ? rows[rows.length - 1].id : null; $('#more-activity').hidden = PLANB || rows.length < 30;
     } catch (e) { $('#activity-list').innerHTML = `<div class="err">${esc(e.message)}</div>`; }
@@ -336,6 +359,8 @@
         <div class="card"><canvas id="cc" height="200" style="width:100%"></canvas><div id="cc-empty" class="empty" hidden>No candles yet</div></div>
         <div class="stats3"><div><small>Market cap</small>${d.market_cap != null ? '$' + Math.round(d.market_cap).toLocaleString() : '—'}</div><div><small>Liquidity</small>${d.liquidity != null ? '$' + Math.round(d.liquidity).toLocaleString() : '—'}</div><div><small>Holders</small>${d.holders ?? '—'}</div></div>${d.score != null ? `<div class="secondary small" style="margin-top:6px">Analyst score ${d.score}</div>` : ''}
         ${p ? `<div class="card">Your position · ${money(p.size_usd)} in · Executor${p.closed_at ? ' · closed: ' + esc(p.exit_reason) : ''}</div>` : ''}
+        ${d.layers && d.layers.length ? `<div class="card"><div class="row-head"><span>Audit</span></div><div class="discs">${d.layers.map(l => `<div class="disc ${l.pass === 1 || l.pass === '1' ? 'ok' : l.pass === 0 || l.pass === '0' ? 'bad' : 'na'}"><b>${l.pass === 1 || l.pass === '1' ? '✓' : l.pass === 0 || l.pass === '0' ? '✕' : '·'}</b><span>${esc(l.name || l.layer)}</span><small>${esc(l.value_text || '')}</small></div>`).join('')}</div></div>` : ''}
+        ${d.decisions && d.decisions.length ? `<div class="card dec-list"><div class="row-head"><span>Desk work</span></div>${d.decisions.map(r => `<div class="ln"><span class="t mono tertiary">${hms(r.ts)}</span><span class="b" style="color:${CURSOR_COLORS[r.bot] || COLORS[r.bot] || '#fff'}">@${esc(r.bot)}</span><span>${esc(r.text)}</span></div>`).join('')}</div>` : ''}
         <a class="btn ghost" style="display:flex;align-items:center;justify-content:center;text-decoration:none" href="${esc(d.coin_url)}" target="_blank" rel="noopener">Open on FOMO</a>
         ${p && !p.closed_at && !PLANB ? '<button class="btn red" id="sellnow">Sell now</button>' : ''}`);
       $('#cc-empty').hidden = DeskChart.candles($('#cc'), d.candles, p && !p.closed_at ? p.stop_price : null);

@@ -304,42 +304,28 @@
 
   // ---------- agents row + log (savipww-style, t490u). Driven only by real desk2 decision rows. ----------
   const REDUCE = matchMedia('(prefers-reduced-motion: reduce)');
-  // v2 (t496u): fomo-style flat blobs. Look only; the data path (flash/votes/heartbeats) is unchanged.
+  // v3 (t497u): Kayke's real Grok Bot avatars (cropped from his iPhone list). Look only.
   const AGENTS = [
-    { k: 'scanner', label: 'SCANNER', lc: '#5A94FF', blob: '#32ADE6', ring: '#5A94FF', seg: '#FFD60A', shape: 'star', bots: ['scanner'], hb: 'scanner' },
-    { k: 'chart', label: 'CHART READER', lc: '#FF9F0A', blob: '#FF9F0A', ring: '#FF9F0A', seg: '#FFE066', shape: 'tri', bots: ['chart'], hb: 'brain' },
-    { k: 'auditor', label: 'AUDITOR', lc: '#FF375F', blob: '#FF375F', ring: '#FF375F', seg: '#FF9EB5', shape: 'heart', bots: ['analyst'], hb: 'analyst' },
-    { k: 'risk', label: 'RISK MANAGER', lc: '#8E8E93', blob: '#8E8E93', ring: '#BF5AF2', seg: '#E3B8FF', shape: 'hex', bots: ['risk'], hb: 'risk' },
-    { k: 'brain', label: 'BRAIN', lc: '#30D158', blob: '#BF5AF2', ring: '#30D158', seg: '#A6F2BC', shape: 'cloud', bots: ['brain', 'executor'], hb: 'brain' }
+    { k: 'brain', label: 'brain', file: 'brain.png', ring: '#FF263C', seg: '#FF8A9A', bots: ['brain'], hb: 'brain' },
+    { k: 'scanner', label: 'scanner', file: 'scanner.png', ring: '#1084FE', seg: '#7EC0FF', bots: ['scanner'], hb: 'scanner' },
+    { k: 'tradedesk', label: 'trade desk', file: 'trade-desk.png', ring: '#00C972', seg: '#6EE8B0', bots: ['risk'], hb: 'risk' },
+    { k: 'executor', label: 'executor', file: 'executor.png', ring: '#00BCA6', seg: '#6EE8DC', bots: ['executor'], hb: 'executor' },
+    { k: 'analyst', label: 'analyst', file: 'analyst.png', ring: '#FF9800', seg: '#FFD60A', bots: ['chart'], hb: 'brain' },
+    { k: 'auditor', label: 'Auditor', file: 'Auditor.png', ring: '#D1D1D6', seg: '#FFFFFF', bots: ['analyst'], hb: 'analyst' }
   ];
   const AGENT_OF = {}; AGENTS.forEach(a => a.bots.forEach(b => AGENT_OF[b] = a));
-  const LOG_NAME = { scanner: 'SCANNER', analyst: 'AUDITOR', chart: 'CHART READER', risk: 'RISK', brain: 'BRAIN', executor: 'EXECUTOR' };
-  const LOG_COLOR = { scanner: '#5A94FF', analyst: '#FF375F', chart: '#FF9F0A', risk: '#BF5AF2', brain: '#30D158', executor: '#64d2ff' };
+  const LOG_NAME = { scanner: 'scanner', analyst: 'Auditor', chart: 'analyst', risk: 'trade desk', brain: 'brain', executor: 'executor' };
+  const LOG_COLOR = { scanner: '#1084FE', analyst: '#D1D1D6', chart: '#FF9800', risk: '#00C972', brain: '#FF263C', executor: '#00BCA6' };
   const EMO = { kill: '❌', pass: '✅', reject: '⛔', skip: '✋', bought: '🟢', sold: '💰', stopped: '🛑', size: '💵', click: '👆', fail: '⚠️', shadow: '👻', dip: '⏬', wait: '⏳', social: '💬', mint: '🪙' };
   const faceTimers = {}; const marks = {};
-  function starPath() { // squiggly 6-point star
-    let d = ''; for (let i = 0; i <= 120; i++) { const t = i / 120 * Math.PI * 2, r = 25 + 7.5 * Math.cos(6 * t) + 1.6 * Math.cos(18 * t); d += (i ? 'L' : 'M') + (44 + r * Math.cos(t - Math.PI / 2)).toFixed(1) + ' ' + (44 + r * Math.sin(t - Math.PI / 2)).toFixed(1); }
-    return d + 'Z';
-  }
-  const SHAPES = {
-    star: (c) => `<path d="${starPath()}" fill="${c}"/>`,
-    tri: (c) => `<path d="M44 20 L66 60 L22 60 Z" fill="${c}" stroke="${c}" stroke-width="11" stroke-linejoin="round"/>`,
-    heart: (c) => `<path d="M44 66 C20 50 16 38 16 31 C16 22 23 17 30 17 C37 17 42 21 44 26 C46 21 51 17 58 17 C65 17 72 22 72 31 C72 38 68 50 44 66Z" fill="${c}" stroke="${c}" stroke-width="4" stroke-linejoin="round"/>`,
-    hex: (c) => `<path d="M44 22 L63 33 L63 55 L44 66 L25 55 L25 33 Z" fill="${c}" stroke="${c}" stroke-width="10" stroke-linejoin="round"/>`,
-    cloud: (c) => `<g fill="${c}"><circle cx="31" cy="48" r="12"/><circle cx="44" cy="36" r="15"/><circle cx="58" cy="47" r="13"/><rect x="31" y="46" width="27" height="14" rx="7"/></g>`
-  };
-  const EYES = { star: [37, 42], tri: [38, 50], heart: [36, 38], hex: [36, 44], cloud: [36, 46] };
-  function blobSvg(a) {
-    const [ey, ex] = [EYES[a.shape][1], EYES[a.shape][0]];
-    return `<svg viewBox="0 0 88 88" class="blob-svg" aria-hidden="true">
-      <circle class="disc" cx="44" cy="44" r="36" fill="#2C2C2E"/>
+  function ringSvg(a) {
+    return `<svg viewBox="0 0 88 88" class="ring-svg" aria-hidden="true">
       <circle class="track" cx="44" cy="44" r="41" fill="none" stroke="${a.ring}" stroke-width="3"/>
-      <circle class="seg" cx="44" cy="44" r="41" fill="none" stroke="${a.seg}" stroke-width="6" stroke-linecap="round" stroke-dasharray="52 206"/>
-      <g class="blob">${SHAPES[a.shape](a.blob)}<circle cx="${ex}" cy="${ey}" r="3.1" fill="#16161a"/><circle cx="${88 - ex}" cy="${ey}" r="3.1" fill="#16161a"/></g></svg>`;
+      <circle class="seg" cx="44" cy="44" r="41" fill="none" stroke="${a.seg}" stroke-width="6" stroke-linecap="round" stroke-dasharray="52 206"/></svg>`;
   }
   function renderAgents() {
     const box = $('#agents'); if (!box || box.children.length) return;
-    box.innerHTML = AGENTS.map(a => `<div class="agent" data-a="${a.k}" style="--c:${a.ring};--lc:${a.lc}"><div class="face">${blobSvg(a)}<span class="mark" hidden></span></div><div class="alabel">${a.label}</div></div>`).join('');
+    box.innerHTML = AGENTS.map(a => `<div class="agent" data-a="${a.k}" style="--c:${a.ring}"><div class="face">${ringSvg(a)}<img class="avatar-img" src="avatars/${a.file}" alt="" width="256" height="256"><span class="mark" hidden></span></div><div class="alabel">${a.label}</div></div>`).join('');
   }
   function agentAlive() {
     const hb = (lastState && lastState.heartbeats) || {}, now = Date.now() / 1000;

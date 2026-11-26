@@ -133,23 +133,23 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .coin-line,.coin-head{display:flex;align-items:center;gap:8px}
 .coin-head .cav{width:36px;height:36px}
 
-/* ---------- Agents v2 (t496u): fomo-style dark card + flat blobs. Look only. ---------- */
-:root{--card:#1c1c1e;--card2:#2c2c2e}
-body{background:#000}
-.agents-card{margin-top:16px;background:#1c1c1e;border-radius:28px;padding:20px 0 18px}
-.agents-head{display:flex;align-items:baseline;justify-content:space-between;margin:0 20px 14px}.agents-run{font:600 14px var(--txt);color:#30d158}
+/* ---------- Agents v3 (t497u): Kayke's real Grok Bot avatars, 6 desk bots. Look only. ---------- */
+.agents-card{margin-top:16px;background:#1c1c1e;border-radius:28px;padding:18px 0 16px}
+.agents-head{display:flex;align-items:baseline;justify-content:space-between;margin:0 16px 12px}
+.agents-run{font:600 14px var(--txt);color:#30d158}
 .agents-title{margin:0;font:700 24px/1.1 var(--disp);letter-spacing:-.4px;color:#fff}
-.agents{display:flex;gap:16px;overflow-x:auto;overflow-y:hidden;padding:6px 20px 4px;scroll-snap-type:x proximity;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.agents{display:flex;justify-content:space-between;gap:4px;overflow-x:auto;overflow-y:hidden;padding:4px 12px 2px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .agents::-webkit-scrollbar{display:none}
-.agent{flex:0 0 70px;display:flex;flex-direction:column;align-items:center;scroll-snap-align:start;transition:filter .3s,opacity .3s}
-.agent .face{position:relative;width:66px;height:66px}
-.agent .blob-svg{width:100%;height:100%;display:block;overflow:visible}
+.agent{flex:1 1 0;min-width:52px;max-width:72px;display:flex;flex-direction:column;align-items:center;transition:filter .3s,opacity .3s}
+.agent .face{position:relative;width:100%;max-width:58px;aspect-ratio:1}
+.agent .ring-svg{width:100%;height:100%;display:block;overflow:visible}
+.agent .avatar-img{position:absolute;inset:7px;width:calc(100% - 14px);height:calc(100% - 14px);object-fit:contain;pointer-events:none}
 .agent .track{transition:opacity .25s}
 .agent .seg{opacity:0;transform-origin:center;transform-box:fill-box}
 .agent.on .track{opacity:.35}
 .agent.on .seg{opacity:1;animation:segspin 1.05s linear infinite}
-.agent .alabel{margin-top:10px;font:700 10.5px/1.15 var(--txt);letter-spacing:.6px;color:var(--lc);text-align:center;text-transform:uppercase;white-space:normal;max-width:70px}
-.agent .mark{position:absolute;right:-6px;bottom:-4px;width:28px;height:28px;box-sizing:border-box;border-radius:50%;border:3px solid #1c1c1e;font:800 13px/22px var(--txt);text-align:center;color:#fff}
+.agent .alabel{margin-top:6px;font:700 10px/1.15 var(--txt);letter-spacing:-.1px;color:#fff;text-align:center;white-space:normal;max-width:100%}
+.agent .mark{position:absolute;right:-6px;bottom:-4px;width:22px;height:22px;box-sizing:border-box;border-radius:50%;border:3px solid #1c1c1e;font:800 11px/16px var(--txt);text-align:center;color:#fff}
 .agent .mark.yes{background:#30d158}.agent .mark.no{background:#ff453a}
 .agent.on .mark{display:none}
 .agent.off{filter:grayscale(1);opacity:.45}

@@ -45,8 +45,10 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .cur.active{z-index:3}
 .cur .tag{font:700 9px/1 var(--txt);color:currentColor;text-shadow:0 0 3px #000,0 1px 2px #000;margin-left:14px;margin-top:-16px;white-space:nowrap}
 .cur .bubble{max-width:132px;margin:2px 0 0 14px;background:rgba(0,0,0,.82);color:#fff;padding:4px 6px;border-radius:8px;border:1px solid rgba(255,255,255,.12);box-shadow:0 2px 8px #0008}
-.cur .bubble .msg{font:600 10px/1.25 var(--txt);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.cur .bubble .msg{font:600 10px/1.25 var(--txt);display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-wrap}
 .cur .bubble .when{margin-top:2px;font:500 9px/1.2 var(--mono);color:var(--sec)}
+.cur[data-bot="risk"] .bubble{max-width:170px}
+.cur[data-bot="risk"] .bubble .msg{-webkit-line-clamp:8}
 .cur.idle{opacity:.78}
 .cur.flip .tag,.cur.flip .bubble{margin-left:0;margin-right:16px;transform:translateX(-100%)}
 @media (prefers-reduced-motion:reduce){.cur{transition:none}}
